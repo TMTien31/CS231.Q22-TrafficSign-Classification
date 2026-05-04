@@ -3,237 +3,487 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Demo Phân loại Biển báo</title>
+    <title>Demo Phân loại Loại Biển báo SVM+HOG</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #4361ee;
-            --primary-hover: #3a0ca3;
-            --bg: #f8f9fa;
-            --card-bg: #ffffff;
-            --text: #2b2d42;
-            --text-muted: #6c757d;
-            --success: #2ecc71;
-            --warning-bg: #fff3cd;
-            --warning-text: #856404;
-            --warning-border: #ffeeba;
-            --error: #e63946;
+            --bg:        #0d0f14;
+            --surface:   #161923;
+            --surface2:  #1e2433;
+            --border:    #2a3347;
+            --accent:    #4af0c4;
+            --accent2:   #4361ee;
+            --warn:      #f9a825;
+            --danger:    #ef5350;
+            --text:      #e8edf5;
+            --muted:     #6b7a99;
+            --mono:      'Space Mono', monospace;
+            --sans:      'DM Sans', sans-serif;
         }
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background-color: var(--bg); 
-            color: var(--text); 
-            margin: 0; 
-            padding: 0; 
-            min-height: 100vh;
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh; /* Ưu tiên hiển thị full màn hình */
+            overflow-x: hidden;
+            padding: 16px 24px; /* Giảm padding dọc */
+        }
+
+        /* ── Header ── */
+        .header {
+            max-width: 1440px; /* Tăng từ 1280px lên 1440px */
+            margin: 0 auto 20px; /* Giảm margin bottom */
             display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .app-container {
-            width: 95%;
-            max-width: 500px;
-            margin: 40px auto;
-            transition: max-width 0.4s ease-out;
-        }
-        .app-container.has-result {
-            max-width: 1100px;
-        }
-        .card {
-            background: var(--card-bg); 
-            padding: 30px; 
-            border-radius: 16px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.08); 
-        }
-        .layout-split {
-            display: flex;
-            flex-direction: column;
-            gap: 30px;
-        }
-        @media (min-width: 768px) {
-            .app-container.has-result .layout-split {
-                flex-direction: row;
-                align-items: flex-start;
-            }
-            .app-container.has-result .left-panel {
-                flex: 0 0 350px; /* Độ rộng cố định cho cột trái */
-            }
-            .app-container.has-result .right-panel {
-                flex: 1; /* Cột phải chiếm toàn bộ không gian còn lại */
-                min-width: 0; /* Ngăn lỗi flexbox overflow */
-            }
-        }
-        h1 { text-align: center; color: var(--text); font-size: 24px; margin-top: 0; }
-        .note { font-size: 14px; color: var(--text-muted); font-style: italic; text-align: center; margin-bottom: 25px; line-height: 1.5; }
-        form { display: flex; flex-direction: column; gap: 15px; }
-        
-        .file-upload-wrapper {
-            position: relative;
-            border: 2px dashed #cbd5e1;
-            border-radius: 12px;
-            padding: 25px 20px;
-            text-align: center;
-            transition: all 0.3s;
-            background: #f8fafc;
-        }
-        .file-upload-wrapper:hover {
-            border-color: var(--primary);
-            background: #f1f5f9;
-        }
-        input[type="file"] { 
-            width: 100%;
-            font-size: 14px;
-            cursor: pointer;
-        }
-        
-        button { 
-            background: var(--primary); 
-            color: #fff; 
-            border: none; 
-            padding: 14px; 
-            border-radius: 8px; 
-            cursor: pointer; 
-            font-size: 16px; 
-            font-weight: 600;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 6px rgba(67, 97, 238, 0.2);
-        }
-        button:hover { 
-            background: var(--primary-hover); 
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(67, 97, 238, 0.3);
-        }
-        
-        .left-panel {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .right-panel {
-            background: #f8fafc;
-            border-radius: 12px;
-            padding: 25px;
-            border: 1px solid #e2e8f0;
-            display: flex;
-            flex-direction: column;
+            align-items: flex-end;
             gap: 20px;
-            align-items: center;
-            justify-content: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 12px; /* Giảm padding */
         }
-        
-        .result-header { text-align: center; margin-top: 15px; padding-top: 20px; border-top: 1px solid #eee; }
-        .result-header h2 { margin: 0 0 10px 0; font-size: 18px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
-        .result-class { color: var(--success); font-size: 32px; font-weight: bold; display: block; margin-top: 5px; }
-        .confidence-badge {
-            display: inline-block;
-            background: #e2f8eb;
-            color: #198754;
-            padding: 6px 16px;
-            border-radius: 20px;
+        .header-badge {
+            font-family: var(--mono);
+            font-size: 10px;
+            background: var(--accent);
+            color: #000;
+            padding: 4px 10px;
+            border-radius: 4px;
+            letter-spacing: 1.5px;
+            font-weight: 700;
+            align-self: center;
+        }
+        .header h1 {
+            font-size: clamp(18px, 2.5vw, 24px); /* Giảm nhẹ size chữ */
             font-weight: 600;
-            font-size: 14px;
-            margin-top: 15px;
-            box-shadow: 0 2px 4px rgba(25, 135, 84, 0.1);
+            color: var(--text);
+            line-height: 1.2;
         }
-        
-        .result-images {
+        .header p {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+
+        /* ── Main layout ── */
+        .main {
+            max-width: 1440px; /* Tăng chiều rộng tổng thể */
+            margin: 0 auto;
             display: grid;
-            grid-template-columns: 1fr;
-            gap: 20px;
+            grid-template-columns: 280px 1fr; /* Thu hẹp sidebar trái một chút */
+            gap: 20px; /* Giảm gap */
+            align-items: start;
+        }
+        @media (max-width: 900px) {
+            .main { grid-template-columns: 1fr; }
+        }
+
+        /* ── Card ── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px; /* Bo góc mượt hơn */
+            padding: 16px; /* Giảm padding từ 22px xuống 16px */
+        }
+
+        /* ── Upload panel ── */
+        .upload-panel h2 {
+            font-family: var(--mono);
+            font-size: 11px;
+            letter-spacing: 2px;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 14px;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 20px 12px; /* Thu gọn padding drop zone */
+            text-align: center;
+            background: var(--surface2);
+            transition: border-color .2s, background .2s;
+            cursor: pointer;
+            position: relative;
+        }
+        .drop-zone:hover { border-color: var(--accent); background: #1a2135; }
+        .drop-zone input[type="file"] {
+            position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+        }
+        .drop-zone .icon { font-size: 28px; margin-bottom: 8px; }
+        .drop-zone p { font-size: 13px; color: var(--muted); }
+        .drop-zone strong { color: var(--accent); }
+
+        .btn {
+            display: block;
             width: 100%;
+            margin-top: 12px;
+            padding: 12px;
+            background: var(--accent2);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-family: var(--sans);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background .2s, transform .15s;
         }
-        @media (min-width: 1100px) {
-            .result-images {
-                grid-template-columns: 1fr 1fr;
-            }
-            .single-img {
-                grid-template-columns: auto !important;
-                justify-content: center;
-            }
+        .btn:hover { background: #3354d4; transform: translateY(-1px); }
+        .btn:active { transform: translateY(0); }
+
+        /* ── Alert boxes ── */
+        .alert {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            line-height: 1.4;
         }
-        
-        .img-box { 
-            text-align: center; 
-            background: #fff;
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            border: 1px solid #f1f5f9;
+        .alert-warn  { background: #2a2000; border: 1px solid #5a4000; color: var(--warn); }
+        .alert-error { background: #200808; border: 1px solid #4a1515; color: var(--danger); }
+
+        /* ── Right content ── */
+        .right-content {
+            display: flex;
+            flex-direction: column;
+            gap: 16px; /* Giảm gap giữa các card bên phải */
         }
-        .img-box h4 { margin: 0 0 15px 0; font-size: 15px; color: var(--text-muted); }
-        .img-box img { 
-            max-width: 100%; 
-            height: auto; 
-            max-height: 400px; 
-            border-radius: 8px; 
+
+        /* ── Section title ── */
+        .section-label {
+            font-family: var(--mono);
+            font-size: 10px;
+            letter-spacing: 2px;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        /* ── Pipeline steps strip ── */
+        .pipeline-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        .pipeline-step {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--accent);
+            white-space: nowrap;
+        }
+        .pipeline-arrow { color: var(--border); font-size: 14px; }
+
+        /* ── Image grid (overview) ── */
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr); /* Bắt buộc 4 cột trên 1 hàng ngang */
+            gap: 12px;
+        }
+        .img-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .img-card .step-num {
+            font-family: var(--mono);
+            font-size: 9px;
+            color: var(--muted);
+        }
+        .img-card .step-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .img-card .step-desc {
+            font-size: 10px;
+            color: var(--muted);
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;  
+            overflow: hidden;
+        }
+        .img-frame {
+            width: 100%;
+            aspect-ratio: 1/1;
+            max-height: 180px; /* Khống chế không cho ảnh quá to */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0a0c10;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .img-frame img {
+            max-width: 100%;
+            max-height: 100%;
             object-fit: contain;
+            border-radius: 4px;
         }
+        .img-frame.hog-frame { background: #060810; }
+
+        /* ── ROI results ── */
+        .roi-list { display: flex; flex-direction: column; gap: 16px; }
+        .roi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .roi-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            background: var(--surface2);
+            border-bottom: 1px solid var(--border);
+        }
+        .roi-index { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+        .roi-label { font-size: 16px; font-weight: 700; color: var(--accent); letter-spacing: .5px; }
+        .roi-score {
+            font-family: var(--mono); font-size: 11px; background: #0a2e24;
+            color: var(--accent); border: 1px solid #1a5040; padding: 4px 10px; border-radius: 20px;
+        }
+        .roi-body { padding: 12px; }
         
-        .error { color: var(--error); background: #fdf2f2; padding: 12px; border-radius: 8px; text-align: center; font-weight: 500; border: 1px solid #fde2e4; margin-top: 10px; }
-        .warning { background-color: var(--warning-bg); color: var(--warning-text); padding: 15px; border-radius: 8px; border: 1px solid var(--warning-border); font-size: 14px; line-height: 1.5; margin-top: 10px;}
+        .roi-pipeline {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr); /* Bắt buộc 4 cột tương tự bên trên */
+            gap: 12px;
+        }
+        .roi-step { display: flex; flex-direction: column; gap: 6px; }
+        .roi-step .step-label {
+            font-size: 10px; color: var(--muted); font-family: var(--mono);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .roi-step .img-frame { aspect-ratio: 1/1; }
+
+        /* ── Empty state ── */
+        .empty-state {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 60px 40px; gap: 12px; color: var(--muted);
+            border: 2px dashed var(--border); border-radius: 12px;
+        }
+        .empty-state .big-icon { font-size: 40px; opacity: .4; }
+        .empty-state p { font-size: 13px; text-align: center; line-height: 1.6; }
     </style>
 </head>
 <body>
-    <div class="app-container {% if pred_class %}has-result{% endif %} card">
-        <div class="layout-split">
-            
-            <!-- Khu vực điều khiển (Trái) -->
-            <div class="left-panel">
-                <div class="header">
-                    <h1>Phân loại Biển báo Giao thông</h1>
-                    <p class="note">Mô hình SVM + HOG.<br>Hoạt động tốt nhất với ảnh chứa biển báo được crop gần.</p>
-                </div>
-                
-                <form action="/" method="POST" enctype="multipart/form-data">
-                    <div class="file-upload-wrapper">
-                        <input type="file" name="file" accept="image/*" required>
-                    </div>
-                    <button type="submit">Dự đoán</button>
-                </form>
 
-                {% if error %}
-                <div class="error"><b>Lỗi:</b> {{ error }}</div>
-                {% endif %}
-
-                {% if pred_class %}
-                <div class="result-header">
-                    <h2>Nhãn dãn</h2>
-                    <span class="result-class">{{ pred_class }}</span>
-                    {% if confidence %}
-                    <div>
-                        <span class="confidence-badge">Độ tin cậy: {{ confidence }}%</span>
-                    </div>
-                    {% endif %}
-                </div>
-                
-                {% if localization_failed %}
-                <div class="warning">
-                    <b>⚠️ Cảnh báo:</b><br>
-                    Không tự động khoanh vùng được biển báo. Mô hình đang dự đoán trên toàn bộ ảnh, kết quả có thể kém chính xác. Nên thử cắt sát ảnh hơn.
-                </div>
-                {% endif %}
-                {% endif %}
-            </div>
-
-            <!-- Khu vực hiển thị ảnh (Phải) -->
-            {% if pred_class or (error and image_path) %}
-            <div class="right-panel">
-                <div class="result-images {% if localization_failed or not crop_path %}single-img{% endif %}">
-                    <div class="img-box">
-                        <h4>Ảnh gốc</h4>
-                        <img src="{{ image_path }}" alt="Original Image">
-                    </div>
-                    
-                    {% if not localization_failed and crop_path %}
-                    <div class="img-box">
-                        <h4>Vùng cắt được</h4>
-                        <img src="{{ crop_path }}" alt="Cropped Image">
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-            {% endif %}
-            
-        </div>
+<header class="header">
+    <div>
+        <span class="header-badge">SVM + HOG</span>
     </div>
+    <div>
+        <h1>Phân loại Loại Biển báo Giao thông</h1>
+        <p>Color masking → Contour detection → Shape filtering → HOG → SVM predict</p>
+    </div>
+</header>
+
+<div class="main">
+
+    <!-- ── Upload panel ── -->
+    <aside class="card upload-panel">
+        <h2>Upload ảnh</h2>
+
+        <form method="POST" enctype="multipart/form-data">
+            <div class="drop-zone">
+                <div class="icon">🖼️</div>
+                <p>Kéo thả hoặc <strong>chọn file</strong></p>
+                <input type="file" name="file" accept="image/*" required>
+            </div>
+            <button type="submit" class="btn">▶ Phân tích &amp; Dự đoán</button>
+        </form>
+
+        {% if error %}
+        <div class="alert alert-error"><b>Lỗi:</b> {{ error }}</div>
+        {% endif %}
+
+        {% if fallback %}
+        <div class="alert alert-warn">
+            ⚠️ <b>Cảnh báo:</b> Không phát hiện được vùng nghi là biển báo qua color masking.<br>
+            Đang dùng <b>toàn bộ ảnh</b> làm fallback — kết quả có thể kém chính xác.
+            Nên crop ảnh sát biển báo hơn.
+        </div>
+        {% endif %}
+
+        {% if roi_results %}
+        <div style="margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px;">
+            <div class="section-label">Kết quả phân loại</div>
+            {% for r in roi_results %}
+            <div style="margin-bottom: 12px;">
+                <div style="font-size: 11px; color: var(--muted); font-family: var(--mono);">ROI {{ loop.index }}</div>
+                <div style="font-size: 22px; font-weight: 700; color: var(--accent);">{{ r.label }}</div>
+                {% if r.score is not none %}
+                <div style="font-size: 12px; color: var(--muted);">Confidence: <b style="color: var(--text)">{{ r.score }}%</b></div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </aside>
+
+    <!-- ── Right content ── -->
+    <main class="right-content">
+
+        {% if original_b64 %}
+
+        <!-- Pipeline overview strip -->
+        <div class="card">
+            <div class="section-label">Pipeline</div>
+            <div class="pipeline-strip">
+                <span class="pipeline-step">Upload ảnh</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-step">Color mask</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-step">Clean mask</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-step">Contour + Shape</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-step">Crop ROI</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-step">Resize 64×64</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-step">Grayscale</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-step">HOG</span>
+                <span class="pipeline-arrow">→</span>
+                <span class="pipeline-step">SVM predict</span>
+            </div>
+        </div>
+
+        <!-- Overview images: original, mask, clean mask, boxed -->
+        <div class="card">
+            <div class="section-label">Bước 1–4 · Phát hiện vùng biển báo</div>
+            <div class="overview-grid">
+
+                <div class="img-card">
+                    <div>
+                        <div class="step-num">BƯỚC 1</div>
+                        <div class="step-title">Ảnh gốc</div>
+                        <div class="step-desc">Ảnh upload.</div>
+                    </div>
+                    <div class="img-frame">
+                        <img src="{{ original_b64 }}" alt="Original">
+                    </div>
+                </div>
+
+                <div class="img-card">
+                    <div>
+                        <div class="step-num">BƯỚC 2</div>
+                        <div class="step-title">Color mask</div>
+                        <div class="step-desc">Mask HSV.</div>
+                    </div>
+                    <div class="img-frame">
+                        <img src="{{ raw_mask_b64 }}" alt="Raw mask">
+                    </div>
+                </div>
+
+                <div class="img-card">
+                    <div>
+                        <div class="step-num">BƯỚC 3</div>
+                        <div class="step-title">Clean mask</div>
+                        <div class="step-desc">Open → Close → Dilate.</div>
+                    </div>
+                    <div class="img-frame">
+                        <img src="{{ clean_mask_b64 }}" alt="Clean mask">
+                    </div>
+                </div>
+
+                <div class="img-card">
+                    <div>
+                        <div class="step-num">BƯỚC 4</div>
+                        <div class="step-title">Bounding boxes</div>
+                        <div class="step-desc">Lọc biên dạng & NMS.</div>
+                    </div>
+                    <div class="img-frame">
+                        <img src="{{ boxed_b64 }}" alt="Boxed">
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Per-ROI pipeline -->
+        <div class="roi-section card">
+            <div class="section-label">Bước 5–9 · Rút trích đặc trưng từng ROI</div>
+            <div class="roi-list">
+
+                {% for r in roi_results %}
+                <div class="roi-card">
+                    <div class="roi-header">
+                        <span class="roi-index">ROI {{ loop.index }} / {{ roi_results|length }}</span>
+                        <span class="roi-label">{{ r.label }}</span>
+                        {% if r.score is not none %}
+                        <span class="roi-score">{{ r.score }}%</span>
+                        {% else %}
+                        <span class="roi-score">—</span>
+                        {% endif %}
+                    </div>
+                    <div class="roi-body">
+                        <div class="roi-pipeline">
+
+                            <div class="roi-step">
+                                <span class="step-label">BƯỚC 5 · Crop ROI</span>
+                                <div class="img-frame">
+                                    <img src="{{ r.crop_b64 }}" alt="Crop">
+                                </div>
+                            </div>
+
+                            <div class="roi-step">
+                                <span class="step-label">BƯỚC 6 · Resize 64×64</span>
+                                <div class="img-frame">
+                                    <img src="{{ r.resized_b64 }}" alt="Resized">
+                                </div>
+                            </div>
+
+                            <div class="roi-step">
+                                <span class="step-label">BƯỚC 7 · Grayscale</span>
+                                <div class="img-frame">
+                                    <img src="{{ r.grayscale_b64 }}" alt="Gray">
+                                </div>
+                            </div>
+
+                            <div class="roi-step">
+                                <span class="step-label">BƯỚC 8 · HOG</span>
+                                <div class="img-frame hog-frame">
+                                    <img src="{{ r.hog_b64 }}" alt="HOG">
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+            </div>
+        </div>
+
+        {% else %}
+
+        <div class="empty-state">
+            <div class="big-icon">🚦</div>
+            <p>Upload một ảnh biển báo để bắt đầu.<br>
+            Pipeline sẽ hiển thị từng bước từ color masking đến SVM predict.</p>
+        </div>
+
+        {% endif %}
+
+    </main>
+</div>
+
 </body>
 </html>
