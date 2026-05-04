@@ -8,22 +8,28 @@
 
 ```
 .
-├── app.py                     # Source code backend Flask
+├── data/                      # Dataset (train/test theo class)
+├── demo/                      # Demo Flask + HTML
+│   ├── app.py                 # Entry point cho demo
+│   ├── index.html             # Giao dien web frontend
+│   └── pipeline.py            # Pipeline infer + crop
+├── svm/                       # Tat ca tai san lien quan toi SVM
+│   ├── SVMHOG.ipynb            # Notebook huan luyen SVM + HOG
+│   ├── models/                # Model da train
+│   ├── features/              # Feature extraction (HOG)
+│   ├── svm_classification_report.txt
+│   └── svm_confusion_matrix.png
+├── cnn/                       # (De trong) se phat trien sau
 ├── requirements.txt           # Các dependencies cần cài đặt
-├── models/
-│   └── svm_hog_tuned_model.joblib # Mô hình đã được huấn luyện (cần đặt vào đây)
 ├── static/
-│   ├── crops/                 # Thư mục chứa ảnh candidate đã được crop
-│   └── uploads/               # Thư mục lưu trữ ảnh gốc được upload 
-├── templates/
-│   └── index.html             # Giao diện web frontend
-└── README.md                  # File hướng dẫn
+│   └── uploads/               # Thu muc luu anh upload
+└── README.md                  # File huong dan
 ```
 
 ## Hướng dẫn cài đặt và chạy ứng dụng
 
 1. **Chuẩn bị model:**
-   Đảm bảo bạn đã train model từ Kaggle và lưu file model (ưu tiên tên `svm_hog_tuned_model.joblib` hoặc `svm_hog_model.joblib`). Hãy đặt file này vào thư mục `models/`.
+   Đảm bảo bạn đã train model và lưu file model (ưu tiên tên `svm_hog_tuned_model.joblib` hoặc `svm_hog_model.joblib`). Hãy đặt file này vào thư mục `svm/models/`.
 
 2. **Cài đặt các thư viện cần thiết:**
    Mở terminal (PowerShell hoặc Command Prompt) tại thư mục chứa source code và chạy lệnh:
@@ -31,13 +37,16 @@
    pip install -r requirements.txt
    ```
 
-3. **Chạy ứng dụng Flask:**
+3. **(Tuy chon) Huan luyen lai model:**
+   Mo notebook [svm/SVMHOG.ipynb](svm/SVMHOG.ipynb) va chay theo thu tu cell. Du lieu lay tu `data/train` va `data/test`.
+
+4. **Chạy ứng dụng Flask:**
    Sau khi cài đặt xong thư viện, khởi động máy chủ bằng lệnh:
    ```bash
-   python app.py
+   python demo/app.py
    ```
 
-4. **Sử dụng Website:**
+5. **Sử dụng Website:**
    - Mở trình duyệt web và truy cập vào địa chỉ: [http://127.0.0.1:5000/](http://127.0.0.1:5000/)
    - Upload một bức ảnh chứa biển báo giao thông (ảnh đã crop sát hoặc ảnh toàn cảnh).
    - Backend sẽ tự động phát hiện vùng biển báo màu đỏ, cắt nó ra và dự đoán. Kết quả trả về gồm Nhãn, độ tin cậy và hình ảnh (gốc + cắt).
