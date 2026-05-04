@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 from svm.config import CLASSES, IMG_SIZE
-from svm.features.hog import extract_hog, resize_and_gray
+from svm.svm_features_extraction.hog import extract_hog, resize_and_gray
 
 # HSV thresholds
 RED_LOWER_1 = np.array([0, 70, 50])
