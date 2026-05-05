@@ -29,7 +29,7 @@
 ## Hướng dẫn cài đặt và chạy ứng dụng
 
 1. **Chuẩn bị model:**
-   Đảm bảo bạn đã train model và lưu file model (ưu tiên tên `svm_hog_tuned_model.joblib` hoặc `svm_hog_model.joblib`). Hãy đặt file này vào thư mục `svm/models/`.
+   Đảm bảo bạn đã train model và lưu file model (ưu tiên tên `svm_hog_tuned_model.joblib` hoặc `svm_hog_model.joblib`). Hãy đặt file này vào thư mục `svm/models/` hoặc `svm/svm_models/`.
 
 2. **Cài đặt các thư viện cần thiết:**
    Mở terminal (PowerShell hoặc Command Prompt) tại thư mục chứa source code và chạy lệnh:

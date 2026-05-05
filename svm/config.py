@@ -7,11 +7,22 @@ DATA_DIR = ROOT_DIR / "data"
 TRAIN_DIR = DATA_DIR / "train"
 TEST_DIR = DATA_DIR / "test"
 
-MODELS_DIR = SVM_DIR / "models"
-MODEL_CANDIDATES = [
-    MODELS_DIR / "svm_hog_tuned_model.joblib",
-    MODELS_DIR / "svm_hog_model.joblib",
+MODEL_DIR_CANDIDATES = [
+    SVM_DIR / "models",
+    SVM_DIR / "svm_models",
 ]
+MODEL_FILENAMES = [
+    "svm_hog_tuned_model.joblib",
+    "svm_hog_model.joblib",
+]
+MODEL_CANDIDATES = [
+    model_dir / model_name
+    for model_dir in MODEL_DIR_CANDIDATES
+    for model_name in MODEL_FILENAMES
+]
+
+# Backward-compatible alias for any legacy imports.
+MODELS_DIR = MODEL_DIR_CANDIDATES[0]
 
 IMG_SIZE = (64, 64)
 CLASSES = ["Cam", "Chidan", "Hieulenh", "Nguyhiem", "Phu"]

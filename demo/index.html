@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Demo Phân loại Loại Biển báo SVM+HOG</title>
+    <title>Traffic Sign Classifier — SVM + HOG Demo</title>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -27,20 +27,20 @@
             font-family: var(--sans);
             background: var(--bg);
             color: var(--text);
-            height: 100vh; /* Ưu tiên hiển thị full màn hình */
+            min-height: 100vh;
             overflow-x: hidden;
-            padding: 16px 24px; /* Giảm padding dọc */
+            padding: 16px 24px;
         }
 
         /* ── Header ── */
         .header {
-            max-width: 1440px; /* Tăng từ 1280px lên 1440px */
-            margin: 0 auto 20px; /* Giảm margin bottom */
+            max-width: 1440px;
+            margin: 0 auto 20px;
             display: flex;
             align-items: flex-end;
             gap: 20px;
             border-bottom: 1px solid var(--border);
-            padding-bottom: 12px; /* Giảm padding */
+            padding-bottom: 12px;
         }
         .header-badge {
             font-family: var(--mono);
@@ -53,37 +53,26 @@
             font-weight: 700;
             align-self: center;
         }
-        .header h1 {
-            font-size: clamp(18px, 2.5vw, 24px); /* Giảm nhẹ size chữ */
-            font-weight: 600;
-            color: var(--text);
-            line-height: 1.2;
-        }
-        .header p {
-            font-size: 13px;
-            color: var(--muted);
-            margin-top: 4px;
-        }
+        .header h1 { font-size: clamp(18px, 2.5vw, 24px); font-weight: 600; line-height: 1.2; }
+        .header p  { font-size: 13px; color: var(--muted); margin-top: 4px; }
 
         /* ── Main layout ── */
         .main {
-            max-width: 1440px; /* Tăng chiều rộng tổng thể */
+            max-width: 1440px;
             margin: 0 auto;
             display: grid;
-            grid-template-columns: 280px 1fr; /* Thu hẹp sidebar trái một chút */
-            gap: 20px; /* Giảm gap */
+            grid-template-columns: 280px 1fr;
+            gap: 20px;
             align-items: start;
         }
-        @media (max-width: 900px) {
-            .main { grid-template-columns: 1fr; }
-        }
+        @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
 
         /* ── Card ── */
         .card {
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 12px; /* Bo góc mượt hơn */
-            padding: 16px; /* Giảm padding từ 22px xuống 16px */
+            border-radius: 12px;
+            padding: 16px;
         }
 
         /* ── Upload panel ── */
@@ -99,7 +88,7 @@
         .drop-zone {
             border: 2px dashed var(--border);
             border-radius: 8px;
-            padding: 20px 12px; /* Thu gọn padding drop zone */
+            padding: 20px 12px;
             text-align: center;
             background: var(--surface2);
             transition: border-color .2s, background .2s;
@@ -129,7 +118,7 @@
             cursor: pointer;
             transition: background .2s, transform .15s;
         }
-        .btn:hover { background: #3354d4; transform: translateY(-1px); }
+        .btn:hover  { background: #3354d4; transform: translateY(-1px); }
         .btn:active { transform: translateY(0); }
 
         /* ── Alert boxes ── */
@@ -144,13 +133,9 @@
         .alert-error { background: #200808; border: 1px solid #4a1515; color: var(--danger); }
 
         /* ── Right content ── */
-        .right-content {
-            display: flex;
-            flex-direction: column;
-            gap: 16px; /* Giảm gap giữa các card bên phải */
-        }
+        .right-content { display: flex; flex-direction: column; gap: 16px; }
 
-        /* ── Section title ── */
+        /* ── Section label ── */
         .section-label {
             font-family: var(--mono);
             font-size: 10px;
@@ -160,13 +145,8 @@
             margin-bottom: 12px;
         }
 
-        /* ── Pipeline steps strip ── */
-        .pipeline-strip {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            align-items: center;
-        }
+        /* ── Pipeline strip ── */
+        .pipeline-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
         .pipeline-step {
             background: var(--surface2);
             border: 1px solid var(--border);
@@ -179,10 +159,10 @@
         }
         .pipeline-arrow { color: var(--border); font-size: 14px; }
 
-        /* ── Image grid (overview) ── */
+        /* ── Image grid ── */
         .overview-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr); /* Bắt buộc 4 cột trên 1 hàng ngang */
+            grid-template-columns: repeat(4, 1fr);
             gap: 12px;
         }
         .img-card {
@@ -194,32 +174,22 @@
             flex-direction: column;
             gap: 8px;
         }
-        .img-card .step-num {
-            font-family: var(--mono);
-            font-size: 9px;
-            color: var(--muted);
-        }
-        .img-card .step-title {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .img-card .step-desc {
+        .img-card .step-num   { font-family: var(--mono); font-size: 9px; color: var(--muted); }
+        .img-card .step-title { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .img-card .step-desc  {
             font-size: 10px;
             color: var(--muted);
             line-height: 1.4;
             display: -webkit-box;
             -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;  
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
             overflow: hidden;
         }
         .img-frame {
             width: 100%;
             aspect-ratio: 1/1;
-            max-height: 180px; /* Khống chế không cho ảnh quá to */
+            max-height: 180px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -227,22 +197,12 @@
             border-radius: 6px;
             overflow: hidden;
         }
-        .img-frame img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            border-radius: 4px;
-        }
+        .img-frame img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; }
         .img-frame.hog-frame { background: #060810; }
 
         /* ── ROI results ── */
         .roi-list { display: flex; flex-direction: column; gap: 16px; }
-        .roi-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            overflow: hidden;
-        }
+        .roi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
         .roi-header {
             display: flex;
             align-items: center;
@@ -258,18 +218,13 @@
             color: var(--accent); border: 1px solid #1a5040; padding: 4px 10px; border-radius: 20px;
         }
         .roi-body { padding: 12px; }
-        
-        .roi-pipeline {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr); /* Bắt buộc 4 cột tương tự bên trên */
-            gap: 12px;
-        }
+        .roi-pipeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
         .roi-step { display: flex; flex-direction: column; gap: 6px; }
-        .roi-step .step-label {
-            font-size: 10px; color: var(--muted); font-family: var(--mono);
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .roi-step .img-frame { aspect-ratio: 1/1; }
+        .roi-step .step-label { font-size: 10px; color: var(--muted); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .placeholder-text { color: var(--muted); font-style: italic; }
+        .placeholder-score { color: var(--muted); background: #1a1f2a; border-color: var(--border); }
+        .placeholder-frame { color: var(--muted); font-size: 11px; border: 1px dashed var(--border); background: #0f131a; }
+        .is-hidden { display: none !important; }
 
         /* ── Empty state ── */
         .empty-state {
@@ -284,11 +239,9 @@
 <body>
 
 <header class="header">
+    <div><span class="header-badge">SVM + HOG</span></div>
     <div>
-        <span class="header-badge">SVM + HOG</span>
-    </div>
-    <div>
-        <h1>Phân loại Loại Biển báo Giao thông</h1>
+        <h1>Traffic Sign Classifier</h1>
         <p>Color masking → Contour detection → Shape filtering → HOG → SVM predict</p>
     </div>
 </header>
@@ -297,193 +250,358 @@
 
     <!-- ── Upload panel ── -->
     <aside class="card upload-panel">
-        <h2>Upload ảnh</h2>
+        <h2>Upload Image</h2>
 
-        <form method="POST" enctype="multipart/form-data">
+        <!-- FastAPI processes multipart/form-data POSTs at the same "/" route -->
+        <form id="upload-form" method="POST" action="http://localhost:5000/api/predict" enctype="multipart/form-data">
             <div class="drop-zone">
                 <div class="icon">🖼️</div>
-                <p>Kéo thả hoặc <strong>chọn file</strong></p>
-                <input type="file" name="file" accept="image/*" required>
+                <p>Drag &amp; drop or <strong>choose a file</strong></p>
+                <input id="file-input" type="file" name="file" accept="image/*" required>
             </div>
-            <button type="submit" class="btn">▶ Phân tích &amp; Dự đoán</button>
+            <button id="submit-btn" type="submit" class="btn">▶ Analyze &amp; Predict</button>
         </form>
 
-        {% if error %}
-        <div class="alert alert-error"><b>Lỗi:</b> {{ error }}</div>
-        {% endif %}
+        <div id="error-box" class="alert alert-error is-hidden"></div>
 
-        {% if fallback %}
-        <div class="alert alert-warn">
-            ⚠️ <b>Cảnh báo:</b> Không phát hiện được vùng nghi là biển báo qua color masking.<br>
-            Đang dùng <b>toàn bộ ảnh</b> làm fallback — kết quả có thể kém chính xác.
-            Nên crop ảnh sát biển báo hơn.
+        <div id="fallback-box" class="alert alert-warn is-hidden">
+            ⚠️ <b>Warning:</b> No sign region detected via color masking.<br>
+            Using the <b>full image</b> as a fallback — accuracy may be lower.
+            Try cropping the image closer to the sign.
         </div>
-        {% endif %}
-
-        {% if roi_results %}
         <div style="margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px;">
-            <div class="section-label">Kết quả phân loại</div>
-            {% for r in roi_results %}
-            <div style="margin-bottom: 12px;">
-                <div style="font-size: 11px; color: var(--muted); font-family: var(--mono);">ROI {{ loop.index }}</div>
-                <div style="font-size: 22px; font-weight: 700; color: var(--accent);">{{ r.label }}</div>
-                {% if r.score is not none %}
-                <div style="font-size: 12px; color: var(--muted);">Confidence: <b style="color: var(--text)">{{ r.score }}%</b></div>
-                {% endif %}
+            <div class="section-label">Classification Results</div>
+            <div id="classification-results">
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 11px; color: var(--muted); font-family: var(--mono);">ROI 1</div>
+                    <div style="font-size: 22px; font-weight: 700;" class="placeholder-text">Awaiting upload</div>
+                    <div style="font-size: 12px; color: var(--muted);">Confidence: <b style="color: var(--muted)">--</b></div>
+                </div>
             </div>
-            {% endfor %}
         </div>
-        {% endif %}
     </aside>
 
     <!-- ── Right content ── -->
     <main class="right-content">
-
-        {% if original_b64 %}
-
-        <!-- Pipeline overview strip -->
-        <div class="card">
-            <div class="section-label">Pipeline</div>
-            <div class="pipeline-strip">
-                <span class="pipeline-step">Upload ảnh</span>
-                <span class="pipeline-arrow">→</span>
-                <span class="pipeline-step">Color mask</span>
-                <span class="pipeline-arrow">→</span>
-                <span class="pipeline-step">Clean mask</span>
-                <span class="pipeline-arrow">→</span>
-                <span class="pipeline-step">Contour + Shape</span>
-                <span class="pipeline-arrow">→</span>
-                <span class="pipeline-step">Crop ROI</span>
-                <span class="pipeline-arrow">→</span>
-                <span class="pipeline-step">Resize 64×64</span>
-                <span class="pipeline-arrow">→</span>
-                <span class="pipeline-step">Grayscale</span>
-                <span class="pipeline-arrow">→</span>
-                <span class="pipeline-step">HOG</span>
-                <span class="pipeline-arrow">→</span>
-                <span class="pipeline-step">SVM predict</span>
+        <div id="results-sections" class="is-hidden">
+            <!-- Pipeline overview -->
+            <div class="card">
+                <div class="section-label">Pipeline</div>
+                <div class="pipeline-strip">
+                    <span class="pipeline-step">Upload</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Color Mask</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Clean Mask</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Contour + Shape</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Crop ROI</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Resize 64×64</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Grayscale</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">HOG</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">SVM Predict</span>
+                </div>
             </div>
-        </div>
 
-        <!-- Overview images: original, mask, clean mask, boxed -->
-        <div class="card">
-            <div class="section-label">Bước 1–4 · Phát hiện vùng biển báo</div>
-            <div class="overview-grid">
+            <!-- Stages 1–4 overview images -->
+            <div class="card">
+                <div class="section-label">Stages 1–4 · Sign Region Detection</div>
+                <div class="overview-grid">
 
-                <div class="img-card">
-                    <div>
-                        <div class="step-num">BƯỚC 1</div>
-                        <div class="step-title">Ảnh gốc</div>
-                        <div class="step-desc">Ảnh upload.</div>
-                    </div>
-                    <div class="img-frame">
-                        <img src="{{ original_b64 }}" alt="Original">
-                    </div>
-                </div>
-
-                <div class="img-card">
-                    <div>
-                        <div class="step-num">BƯỚC 2</div>
-                        <div class="step-title">Color mask</div>
-                        <div class="step-desc">Mask HSV.</div>
-                    </div>
-                    <div class="img-frame">
-                        <img src="{{ raw_mask_b64 }}" alt="Raw mask">
-                    </div>
-                </div>
-
-                <div class="img-card">
-                    <div>
-                        <div class="step-num">BƯỚC 3</div>
-                        <div class="step-title">Clean mask</div>
-                        <div class="step-desc">Open → Close → Dilate.</div>
-                    </div>
-                    <div class="img-frame">
-                        <img src="{{ clean_mask_b64 }}" alt="Clean mask">
-                    </div>
-                </div>
-
-                <div class="img-card">
-                    <div>
-                        <div class="step-num">BƯỚC 4</div>
-                        <div class="step-title">Bounding boxes</div>
-                        <div class="step-desc">Lọc biên dạng & NMS.</div>
-                    </div>
-                    <div class="img-frame">
-                        <img src="{{ boxed_b64 }}" alt="Boxed">
-                    </div>
-                </div>
-
-            </div>
-        </div>
-
-        <!-- Per-ROI pipeline -->
-        <div class="roi-section card">
-            <div class="section-label">Bước 5–9 · Rút trích đặc trưng từng ROI</div>
-            <div class="roi-list">
-
-                {% for r in roi_results %}
-                <div class="roi-card">
-                    <div class="roi-header">
-                        <span class="roi-index">ROI {{ loop.index }} / {{ roi_results|length }}</span>
-                        <span class="roi-label">{{ r.label }}</span>
-                        {% if r.score is not none %}
-                        <span class="roi-score">{{ r.score }}%</span>
-                        {% else %}
-                        <span class="roi-score">—</span>
-                        {% endif %}
-                    </div>
-                    <div class="roi-body">
-                        <div class="roi-pipeline">
-
-                            <div class="roi-step">
-                                <span class="step-label">BƯỚC 5 · Crop ROI</span>
-                                <div class="img-frame">
-                                    <img src="{{ r.crop_b64 }}" alt="Crop">
-                                </div>
-                            </div>
-
-                            <div class="roi-step">
-                                <span class="step-label">BƯỚC 6 · Resize 64×64</span>
-                                <div class="img-frame">
-                                    <img src="{{ r.resized_b64 }}" alt="Resized">
-                                </div>
-                            </div>
-
-                            <div class="roi-step">
-                                <span class="step-label">BƯỚC 7 · Grayscale</span>
-                                <div class="img-frame">
-                                    <img src="{{ r.grayscale_b64 }}" alt="Gray">
-                                </div>
-                            </div>
-
-                            <div class="roi-step">
-                                <span class="step-label">BƯỚC 8 · HOG</span>
-                                <div class="img-frame hog-frame">
-                                    <img src="{{ r.hog_b64 }}" alt="HOG">
-                                </div>
-                            </div>
-
+                    <div class="img-card">
+                        <div>
+                            <div class="step-num">STAGE 1</div>
+                            <div class="step-title">Original Image</div>
+                            <div class="step-desc">Input image as uploaded.</div>
                         </div>
+                        <div class="img-frame"><img id="img-original" alt="Original"></div>
                     </div>
-                </div>
-                {% endfor %}
 
+                    <div class="img-card">
+                        <div>
+                            <div class="step-num">STAGE 2</div>
+                            <div class="step-title">Color Mask</div>
+                            <div class="step-desc">HSV ranges for red, blue, yellow, orange.</div>
+                        </div>
+                        <div class="img-frame"><img id="img-raw-mask" alt="Raw mask"></div>
+                    </div>
+
+                    <div class="img-card">
+                        <div>
+                            <div class="step-num">STAGE 3</div>
+                            <div class="step-title">Clean Mask</div>
+                            <div class="step-desc">Open → Close → Dilate.</div>
+                        </div>
+                        <div class="img-frame"><img id="img-clean-mask" alt="Clean mask"></div>
+                    </div>
+
+                    <div class="img-card">
+                        <div>
+                            <div class="step-num">STAGE 4</div>
+                            <div class="step-title">Bounding Boxes</div>
+                            <div class="step-desc">Shape filter + NMS.</div>
+                        </div>
+                        <div class="img-frame"><img id="img-boxed" alt="Boxed"></div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Per-ROI feature extraction -->
+            <div class="roi-section card">
+                <div class="section-label">Stages 5–9 · Feature Extraction per ROI</div>
+                <div class="roi-list" id="roi-list"></div>
             </div>
         </div>
 
-        {% else %}
-
-        <div class="empty-state">
+        <div id="empty-state" class="empty-state">
             <div class="big-icon">🚦</div>
-            <p>Upload một ảnh biển báo để bắt đầu.<br>
-            Pipeline sẽ hiển thị từng bước từ color masking đến SVM predict.</p>
+            <p>Upload a traffic sign image to get started.<br>
+            Each pipeline stage will be visualized here.</p>
         </div>
-
-        {% endif %}
 
     </main>
 </div>
+
+<script>
+    (() => {
+        const resolveApiOrigin = () => {
+            const { protocol, hostname, port, origin } = window.location;
+            if (protocol === "file:") {
+                return "http://localhost:5000";
+            }
+            if (port === "5000") {
+                return origin;
+            }
+            const host = hostname || "localhost";
+            return `${protocol}//${host}:5000`;
+        };
+        const apiOrigin = resolveApiOrigin();
+        const apiUrl = `${apiOrigin}/api/predict`;
+        const form = document.getElementById("upload-form");
+        if (!form) {
+            return;
+        }
+        form.action = apiUrl;
+
+        const fileInput = document.getElementById("file-input");
+        const submitBtn = document.getElementById("submit-btn");
+        const errorBox = document.getElementById("error-box");
+        const fallbackBox = document.getElementById("fallback-box");
+        const resultsSections = document.getElementById("results-sections");
+        const emptyState = document.getElementById("empty-state");
+        const classificationResults = document.getElementById("classification-results");
+        const roiList = document.getElementById("roi-list");
+
+        let hasResults = false;
+
+        const setHidden = (el, hidden) => {
+            if (!el) {
+                return;
+            }
+            el.classList.toggle("is-hidden", hidden);
+        };
+
+        const setResultsVisible = (visible) => {
+            setHidden(resultsSections, !visible);
+            setHidden(emptyState, visible);
+        };
+
+        const escapeHtml = (value) => String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+
+        const setImg = (id, src) => {
+            const img = document.getElementById(id);
+            if (img) {
+                img.src = src || "";
+            }
+        };
+
+        const renderClassification = (roiResults) => {
+            if (!classificationResults) {
+                return;
+            }
+
+            if (!roiResults || roiResults.length === 0) {
+                classificationResults.innerHTML = `
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 11px; color: var(--muted); font-family: var(--mono);">ROI 1</div>
+                        <div style="font-size: 22px; font-weight: 700;" class="placeholder-text">Awaiting upload</div>
+                        <div style="font-size: 12px; color: var(--muted);">Confidence: <b style="color: var(--muted)">--</b></div>
+                    </div>
+                `;
+                return;
+            }
+
+            classificationResults.innerHTML = roiResults.map((r, idx) => {
+                const label = escapeHtml(r.label ?? "Unknown");
+                const score = (r.score === null || r.score === undefined) ? "--" : `${r.score}%`;
+                return `
+                    <div style="margin-bottom: 12px;">
+                        <div style="font-size: 11px; color: var(--muted); font-family: var(--mono);">ROI ${idx + 1}</div>
+                        <div style="font-size: 22px; font-weight: 700; color: var(--accent);">${label}</div>
+                        <div style="font-size: 12px; color: var(--muted);">Confidence: <b style="color: var(--text)">${escapeHtml(score)}</b></div>
+                    </div>
+                `;
+            }).join("");
+        };
+
+        const renderRoiList = (roiResults) => {
+            if (!roiList) {
+                return;
+            }
+
+            if (!roiResults || roiResults.length === 0) {
+                roiList.innerHTML = `
+                    <div class="roi-card">
+                        <div class="roi-header">
+                            <span class="roi-index">ROI - / 0</span>
+                            <span class="roi-label placeholder-text">No ROI detected</span>
+                            <span class="roi-score placeholder-score">--</span>
+                        </div>
+                        <div class="roi-body">
+                            <div class="roi-pipeline">
+                                <div class="roi-step">
+                                    <span class="step-label">STAGE 5 · Crop ROI</span>
+                                    <div class="img-frame placeholder-frame">Awaiting input</div>
+                                </div>
+                                <div class="roi-step">
+                                    <span class="step-label">STAGE 6 · Resize 64x64</span>
+                                    <div class="img-frame placeholder-frame">Awaiting input</div>
+                                </div>
+                                <div class="roi-step">
+                                    <span class="step-label">STAGE 7 · Grayscale</span>
+                                    <div class="img-frame placeholder-frame">Awaiting input</div>
+                                </div>
+                                <div class="roi-step">
+                                    <span class="step-label">STAGE 8 · HOG</span>
+                                    <div class="img-frame hog-frame placeholder-frame">Awaiting input</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            roiList.innerHTML = roiResults.map((r, idx) => {
+                const label = escapeHtml(r.label ?? "Unknown");
+                const score = (r.score === null || r.score === undefined) ? "--" : `${r.score}%`;
+                return `
+                    <div class="roi-card">
+                        <div class="roi-header">
+                            <span class="roi-index">ROI ${idx + 1} / ${roiResults.length}</span>
+                            <span class="roi-label">${label}</span>
+                            <span class="roi-score">${escapeHtml(score)}</span>
+                        </div>
+                        <div class="roi-body">
+                            <div class="roi-pipeline">
+                                <div class="roi-step">
+                                    <span class="step-label">STAGE 5 · Crop ROI</span>
+                                    <div class="img-frame"><img src="${r.crop_b64 || ""}" alt="Crop"></div>
+                                </div>
+                                <div class="roi-step">
+                                    <span class="step-label">STAGE 6 · Resize 64x64</span>
+                                    <div class="img-frame"><img src="${r.resized_b64 || ""}" alt="Resized"></div>
+                                </div>
+                                <div class="roi-step">
+                                    <span class="step-label">STAGE 7 · Grayscale</span>
+                                    <div class="img-frame"><img src="${r.grayscale_b64 || ""}" alt="Gray"></div>
+                                </div>
+                                <div class="roi-step">
+                                    <span class="step-label">STAGE 8 · HOG</span>
+                                    <div class="img-frame hog-frame"><img src="${r.hog_b64 || ""}" alt="HOG"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+        };
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            setHidden(errorBox, true);
+            setHidden(fallbackBox, true);
+
+            if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+                if (errorBox) {
+                    errorBox.innerHTML = "<b>Error:</b> Please choose an image file.";
+                    setHidden(errorBox, false);
+                }
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+
+            if (submitBtn) {
+                submitBtn.disabled = true;
+            }
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: "POST",
+                    body: formData,
+                });
+                const rawText = await response.text();
+                let data = {};
+                try {
+                    data = rawText ? JSON.parse(rawText) : {};
+                } catch (parseErr) {
+                    data = {};
+                }
+
+                if (!response.ok || data.error) {
+                    const message = data && data.error
+                        ? data.error
+                        : `Request failed (${response.status}).`;
+                    if (errorBox) {
+                        errorBox.innerHTML = `<b>Error:</b> ${escapeHtml(message)}`;
+                        setHidden(errorBox, false);
+                    }
+                    if (!hasResults) {
+                        setResultsVisible(false);
+                    }
+                    return;
+                }
+
+                setImg("img-original", data.original_b64);
+                setImg("img-raw-mask", data.raw_mask_b64);
+                setImg("img-clean-mask", data.clean_mask_b64);
+                setImg("img-boxed", data.boxed_b64);
+
+                renderClassification(data.roi_results || []);
+                renderRoiList(data.roi_results || []);
+
+                setHidden(fallbackBox, !data.fallback);
+                setResultsVisible(true);
+                hasResults = true;
+            } catch (err) {
+                if (errorBox) {
+                    errorBox.innerHTML = "<b>Error:</b> Could not reach the backend.";
+                    setHidden(errorBox, false);
+                }
+                if (!hasResults) {
+                    setResultsVisible(false);
+                }
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                }
+            }
+        });
+    })();
+</script>
 
 </body>
 </html>
