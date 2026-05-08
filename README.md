@@ -1,6 +1,6 @@
 # Demo Phân loại Biển báo Giao thông (SVM + HOG)
 
-Ứng dụng web đơn giản bằng Flask dùng để demo kết quả đồ án Nhập môn Thị giác máy tính. 
+Ứng dụng web đơn giản bằng FastAPI dùng để demo kết quả đồ án Nhập môn Thị giác máy tính. 
 
 **Điểm mới:** Demo này không train lại model. Demo chỉ load SVM-HOG model đã train và thêm bước crop/localization (tự động phát hiện và cắt vùng biển báo) trước khi phân loại.
 
@@ -9,7 +9,7 @@
 ```
 .
 ├── data/                      # Dataset (train/test theo class)
-├── demo/                      # Demo Flask + HTML
+├── demo/                      # Demo FastAPI + HTML
 │   ├── app.py                 # Entry point cho demo
 │   ├── index.html             # Giao dien web frontend
 │   └── pipeline.py            # Pipeline infer + crop
@@ -40,10 +40,14 @@
 3. **(Tuy chon) Huan luyen lai model:**
    Mo notebook [svm/SVMHOG.ipynb](svm/SVMHOG.ipynb) va chay theo thu tu cell. Du lieu lay tu `data/train` va `data/test`.
 
-4. **Chạy ứng dụng Flask:**
-   Sau khi cài đặt xong thư viện, khởi động máy chủ bằng lệnh:
+4. **Chạy ứng dụng FastAPI:**
+   Sau khi cài đặt xong thư viện, khởi động máy chủ bằng lệnh (phải cd vào thư mục gốc `demo/`):
    ```bash
    python demo/app.py
+   ```
+   Hoặc bạn có thể dùng `uvicorn` trực tiếp:
+   ```bash
+   uvicorn demo.app:app --reload --port 5000
    ```
 
 5. **Sử dụng Website:**

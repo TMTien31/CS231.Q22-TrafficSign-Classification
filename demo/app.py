@@ -9,7 +9,7 @@ import math
 import sys
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Optional, Tuple
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
@@ -18,7 +18,7 @@ if str(ROOT_DIR) not in sys.path:
 import cv2
 import joblib
 import numpy as np
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import FastAPI, File, Request, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -70,19 +70,24 @@ RED_UPPER_1 = np.array([10, 255, 255])
 RED_LOWER_2 = np.array([160, 70,  50])
 RED_UPPER_2 = np.array([180, 255, 255])
 
-BLUE_LOWER   = np.array([90,  60,  60])
-BLUE_UPPER   = np.array([130, 255, 255])
+BLUE_LOWER   = np.array([85,  60,  60])   # widened slightly for darker blues
+BLUE_UPPER   = np.array([135, 255, 255])
 
 YELLOW_LOWER = np.array([15,  80,  80])
 YELLOW_UPPER = np.array([35,  255, 255])
 
 ORANGE_LOWER = np.array([5,   100, 80])
-ORANGE_UPPER = np.array([15,  255, 255])
+ORANGE_UPPER = np.array([20,  255, 255])  # widened upper hue for orange-red
+
+# White mask for signs with white backgrounds (Hiệu lệnh, etc.)
+# High brightness, low saturation
+WHITE_LOWER = np.array([0,   0,   180])
+WHITE_UPPER = np.array([180, 40,  255])
 
 # ---------------------------------------------------------------------------
 # Contour / ROI filter parameters
 # ---------------------------------------------------------------------------
-MIN_AREA_RATIO = 0.001   # contour must cover at least 0.1 % of image area
+MIN_AREA_RATIO = 0.003   # contour must cover at least 0.1 % of image area
 MAX_AREA_RATIO = 0.60    # contour must not cover more than 60 % of image area
 MIN_ASPECT     = 0.4     # minimum width / height ratio
 MAX_ASPECT     = 2.5     # maximum width / height ratio
@@ -103,7 +108,7 @@ def _encode_bgr_to_base64(image_bgr: np.ndarray) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode("utf-8")
 
 
-def _decode_image_bytes(raw_bytes: bytes) -> np.ndarray | None:
+def _decode_image_bytes(raw_bytes: bytes) -> Optional[np.ndarray]:
     if not raw_bytes:
         return None
     buf = np.frombuffer(raw_bytes, dtype=np.uint8)
@@ -128,10 +133,12 @@ def create_color_mask(image_bgr: np.ndarray) -> np.ndarray:
     mask_blue   = cv2.inRange(hsv, BLUE_LOWER,   BLUE_UPPER)
     mask_yellow = cv2.inRange(hsv, YELLOW_LOWER, YELLOW_UPPER)
     mask_orange = cv2.inRange(hsv, ORANGE_LOWER, ORANGE_UPPER)
+    mask_white  = cv2.inRange(hsv, WHITE_LOWER,  WHITE_UPPER)
 
-    combined = cv2.bitwise_or(mask_red, mask_blue)
-    combined = cv2.bitwise_or(combined, mask_yellow)
-    combined = cv2.bitwise_or(combined, mask_orange)
+    combined = cv2.bitwise_or(mask_red,  mask_blue)
+    combined = cv2.bitwise_or(combined,  mask_yellow)
+    combined = cv2.bitwise_or(combined,  mask_orange)
+    combined = cv2.bitwise_or(combined,  mask_white)
     return combined
 
 
@@ -268,24 +275,60 @@ def apply_nms(
 # Stage 5 - ROI cropping
 # ---------------------------------------------------------------------------
 
+def _center_crop(image_bgr: np.ndarray, ratio: float = 0.65) -> np.ndarray:
+    """
+    Crop the center region of the image (default 65% of each dimension).
+    Useful as a smarter fallback when color masking fails — most demo images
+    have the sign near the center.
+    """
+    h, w = image_bgr.shape[:2]
+    cx, cy = w // 2, h // 2
+    half_w = int(w * ratio / 2)
+    half_h = int(h * ratio / 2)
+    x0 = max(0, cx - half_w)
+    y0 = max(0, cy - half_h)
+    x1 = min(w, cx + half_w)
+    y1 = min(h, cy + half_h)
+    return image_bgr[y0:y1, x0:x1]
+
+
 def crop_rois(
     image_bgr: np.ndarray,
     boxes: list[tuple[int, int, int, int]],
 ) -> list[tuple[np.ndarray, tuple[int, int, int, int]]]:
     """
     Crop each bounding box from the image with a small padding margin.
+
+    Improvements over the original:
+    - Boxes are sorted by proximity to image center (nearest first) so that
+      when there are multiple candidates the most likely sign is ranked first.
+    - Square-ify: expand the shorter side to match the longer side before
+      padding, giving the SVM+HOG pipeline a more consistent aspect ratio.
     Returns (roi_bgr, padded_bbox) pairs; empty crops are skipped.
     """
     img_h, img_w = image_bgr.shape[:2]
-    rois = []
+    cx_img, cy_img = img_w / 2, img_h / 2
 
-    for x, y, w, h in boxes:
-        pad_x = int(w * PADDING_RATIO)
-        pad_y = int(h * PADDING_RATIO)
-        x0 = max(0, x - pad_x)
-        y0 = max(0, y - pad_y)
-        x1 = min(img_w, x + w + pad_x)
-        y1 = min(img_h, y + h + pad_y)
+    # Sort boxes by distance from image center (ascending)
+    def _dist_to_center(box: tuple[int, int, int, int]) -> float:
+        x, y, w, h = box
+        return ((x + w / 2 - cx_img) ** 2 + (y + h / 2 - cy_img) ** 2) ** 0.5
+
+    boxes_sorted = sorted(boxes, key=_dist_to_center)
+
+    rois = []
+    for x, y, w, h in boxes_sorted:
+        # Square-ify: make the crop region square around the box center
+        side = max(w, h)
+        cx = x + w // 2
+        cy = y + h // 2
+        half = side // 2 + 1
+
+        pad = int(side * PADDING_RATIO)
+        x0 = max(0, cx - half - pad)
+        y0 = max(0, cy - half - pad)
+        x1 = min(img_w, cx + half + pad)
+        y1 = min(img_h, cy + half + pad)
 
         roi = image_bgr[y0:y1, x0:x1]
         if roi.size == 0:
@@ -329,8 +372,12 @@ def detect_sign_rois(
     fallback = False
     if not boxes:
         fallback = True
+        # Smarter fallback: use the center 65% of the image instead of the
+        # full frame, since demo images typically have the sign centered.
         h, w = image_bgr.shape[:2]
-        boxes = [(0, 0, w, h)]
+        margin_x = int(w * 0.175)
+        margin_y = int(h * 0.175)
+        boxes = [(margin_x, margin_y, w - 2 * margin_x, h - 2 * margin_y)]
 
     rois_with_boxes = crop_rois(image_bgr, boxes)
     return rois_with_boxes, raw_mask_b64, clean_mask_b64, fallback
@@ -340,7 +387,7 @@ def detect_sign_rois(
 # Stage 9 - SVM prediction
 # ---------------------------------------------------------------------------
 
-def predict_label(feature: np.ndarray, model: Any) -> tuple[str, float | None]:
+def predict_label(feature: np.ndarray, model: Any) -> Tuple[str, Optional[float]]:
     """
     Run the SVM on a single HOG feature vector.
 
@@ -357,7 +404,7 @@ def predict_label(feature: np.ndarray, model: Any) -> tuple[str, float | None]:
     except (ValueError, IndexError, TypeError):
         label = str(raw_pred)
 
-    score: float | None = None
+    score: Optional[float] = None
 
     if hasattr(model, "predict_proba"):
         try:
@@ -419,18 +466,16 @@ def draw_predictions(
 # Top-level inference entry point
 # ---------------------------------------------------------------------------
 
-def run_inference(image_bgr: np.ndarray, model: Any) -> dict[str, Any]:
-    """
-    Full 9-stage pipeline:
-      Stage 2-5 : detect_sign_rois  (color mask -> contour -> NMS -> crop)
-      Stage 6   : resize to IMG_SIZE
-      Stage 7   : convert to grayscale
-      Stage 8   : extract HOG features
-      Stage 9   : SVM prediction
-
-    Returns a context dict suitable for passing directly to the Jinja2 template.
-    """
-    rois_with_boxes, raw_mask_b64, clean_mask_b64, fallback = detect_sign_rois(image_bgr)
+def run_inference(image_bgr: np.ndarray, model: Any, use_masking: bool = True) -> dict[str, Any]:
+    if use_masking:
+        rois_with_boxes, raw_mask_b64, clean_mask_b64, fallback = detect_sign_rois(image_bgr)
+    else:
+        h, w = image_bgr.shape[:2]
+        # Use full image
+        rois_with_boxes = [(image_bgr, (0, 0, w, h))]
+        raw_mask_b64 = ""
+        clean_mask_b64 = ""
+        fallback = False
 
     roi_results: list[dict[str, Any]] = []
 
@@ -501,7 +546,10 @@ def create_app() -> FastAPI:
 
     # -------------------------------------------------------------- POST /api/predict
     @app.post("/api/predict")
-    async def predict_api(file: UploadFile | None = File(None)) -> JSONResponse:
+    async def predict_api(
+        file: Optional[UploadFile] = File(None),
+        use_masking: str = Form("true")
+    ) -> JSONResponse:
         if file is None or not file.filename:
             return JSONResponse({"error": "No file selected."}, status_code=400)
 
@@ -531,7 +579,8 @@ def create_app() -> FastAPI:
                 status_code=400,
             )
 
-        result = run_inference(img, model)
+        use_masking_bool = use_masking.lower() == "true"
+        result = run_inference(img, model, use_masking_bool)
         return JSONResponse(result)
 
     return app
@@ -546,4 +595,5 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
+    print("Server running at: http://localhost:5000")
     uvicorn.run("demo.app:app", host="0.0.0.0", port=5000, reload=False)

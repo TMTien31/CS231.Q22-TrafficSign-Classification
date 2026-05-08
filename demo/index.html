@@ -4,19 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Traffic Sign Classifier — SVM + HOG Demo</title>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg:        #0d0f14;
-            --surface:   #161923;
-            --surface2:  #1e2433;
-            --border:    #2a3347;
+            --bg:        #0b0d12;
+            --surface:   #151922;
+            --surface2:  #1d2432;
+            --surface3:  #10141d;
+            --border:    #2c3548;
+            --border2:   #3b465e;
             --accent:    #4af0c4;
             --accent2:   #4361ee;
+            --accent3:   #7c5cff;
             --warn:      #f9a825;
             --danger:    #ef5350;
-            --text:      #e8edf5;
-            --muted:     #6b7a99;
+            --text:      #edf3fb;
+            --muted:     #8a98b3;
+            --muted2:    #65718a;
             --mono:      'Space Mono', monospace;
             --sans:      'DM Sans', sans-serif;
         }
@@ -25,58 +29,83 @@
 
         body {
             font-family: var(--sans);
-            background: var(--bg);
+            background:
+                radial-gradient(circle at top left, rgba(74, 240, 196, .08), transparent 32%),
+                radial-gradient(circle at top right, rgba(67, 97, 238, .12), transparent 28%),
+                var(--bg);
             color: var(--text);
             min-height: 100vh;
             overflow-x: hidden;
-            padding: 16px 24px;
+            padding: 18px 24px 32px;
         }
 
         /* ── Header ── */
         .header {
-            max-width: 1440px;
-            margin: 0 auto 20px;
+            max-width: 1680px;
+            margin: 0 auto 18px;
             display: flex;
-            align-items: flex-end;
-            gap: 20px;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 12px;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            border: 1px solid rgba(255,255,255,.05);
+            background: rgba(21, 25, 34, .72);
+            backdrop-filter: blur(14px);
+            border-radius: 18px;
+            padding: 16px 18px;
         }
+        .brand { display: flex; align-items: center; gap: 14px; }
         .header-badge {
             font-family: var(--mono);
-            font-size: 10px;
+            font-size: 11px;
             background: var(--accent);
-            color: #000;
-            padding: 4px 10px;
-            border-radius: 4px;
-            letter-spacing: 1.5px;
+            color: #02110d;
+            padding: 6px 11px;
+            border-radius: 999px;
+            letter-spacing: 1.3px;
             font-weight: 700;
-            align-self: center;
+            white-space: nowrap;
         }
-        .header h1 { font-size: clamp(18px, 2.5vw, 24px); font-weight: 600; line-height: 1.2; }
-        .header p  { font-size: 13px; color: var(--muted); margin-top: 4px; }
+        .header h1 { font-size: clamp(22px, 2.8vw, 34px); font-weight: 700; line-height: 1.1; }
+        .header p  { font-size: 14px; color: var(--muted); margin-top: 6px; }
+        .header-note {
+            max-width: 380px;
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.55;
+            text-align: right;
+        }
 
         /* ── Main layout ── */
         .main {
-            max-width: 1440px;
+            max-width: 1680px;
             margin: 0 auto;
             display: grid;
-            grid-template-columns: 280px 1fr;
-            gap: 20px;
+            grid-template-columns: 340px minmax(0, 1fr);
+            gap: 18px;
             align-items: start;
         }
-        @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
+        @media (max-width: 980px) {
+            body { padding: 14px; }
+            .header { align-items: flex-start; flex-direction: column; }
+            .header-note { text-align: left; max-width: none; }
+            .main { grid-template-columns: 1fr; }
+        }
 
         /* ── Card ── */
         .card {
-            background: var(--surface);
+            background: rgba(21, 25, 34, .94);
             border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 16px;
+            border-radius: 18px;
+            padding: 18px;
+            box-shadow: 0 18px 60px rgba(0,0,0,.22);
         }
 
         /* ── Upload panel ── */
-        .upload-panel h2 {
+        .upload-panel {
+            position: sticky;
+            top: 18px;
+        }
+        .panel-title {
             font-family: var(--mono);
             font-size: 11px;
             letter-spacing: 2px;
@@ -86,163 +115,374 @@
         }
 
         .drop-zone {
-            border: 2px dashed var(--border);
-            border-radius: 8px;
-            padding: 20px 12px;
+            border: 2px dashed var(--border2);
+            border-radius: 14px;
+            min-height: 150px;
+            padding: 22px 14px;
             text-align: center;
-            background: var(--surface2);
-            transition: border-color .2s, background .2s;
+            background: linear-gradient(180deg, rgba(30,36,51,.92), rgba(16,20,29,.92));
+            transition: border-color .2s, background .2s, transform .15s;
             cursor: pointer;
             position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 9px;
         }
-        .drop-zone:hover { border-color: var(--accent); background: #1a2135; }
+        .drop-zone:hover { border-color: var(--accent); transform: translateY(-1px); }
         .drop-zone input[type="file"] {
             position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
         }
-        .drop-zone .icon { font-size: 28px; margin-bottom: 8px; }
-        .drop-zone p { font-size: 13px; color: var(--muted); }
+        .drop-zone .icon { font-size: 34px; }
+        .drop-zone p { font-size: 14px; color: var(--muted); line-height: 1.45; }
         .drop-zone strong { color: var(--accent); }
+        .file-name {
+            margin-top: 10px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.35;
+            min-height: 18px;
+            word-break: break-word;
+        }
+
+        .mask-toggle {
+            margin-top: 14px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface3);
+        }
+        .mask-toggle input { margin-top: 3px; transform: scale(1.15); }
+        .mask-toggle label { font-size: 13px; color: var(--text); cursor: pointer; line-height: 1.45; }
+        .mask-toggle small { display: block; color: var(--muted); margin-top: 2px; }
 
         .btn {
             display: block;
             width: 100%;
-            margin-top: 12px;
-            padding: 12px;
-            background: var(--accent2);
+            margin-top: 14px;
+            padding: 14px 12px;
+            background: linear-gradient(135deg, var(--accent2), var(--accent3));
             color: #fff;
             border: none;
-            border-radius: 8px;
+            border-radius: 12px;
             font-family: var(--sans);
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 15px;
+            font-weight: 700;
             cursor: pointer;
-            transition: background .2s, transform .15s;
+            transition: opacity .2s, transform .15s;
         }
-        .btn:hover  { background: #3354d4; transform: translateY(-1px); }
+        .btn:hover  { transform: translateY(-1px); }
+        .btn:disabled { opacity: .6; cursor: wait; }
         .btn:active { transform: translateY(0); }
+
+        .legend {
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+            display: grid;
+            gap: 10px;
+        }
+        .legend-row {
+            display: grid;
+            grid-template-columns: 30px 1fr;
+            gap: 10px;
+            align-items: start;
+        }
+        .legend-num {
+            width: 30px;
+            height: 30px;
+            border-radius: 9px;
+            background: rgba(74,240,196,.12);
+            color: var(--accent);
+            border: 1px solid rgba(74,240,196,.25);
+            display: grid;
+            place-items: center;
+            font-family: var(--mono);
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .legend-row b { display: block; font-size: 13px; margin-bottom: 2px; }
+        .legend-row span { display: block; font-size: 12px; color: var(--muted); line-height: 1.4; }
 
         /* ── Alert boxes ── */
         .alert {
             margin-top: 12px;
-            padding: 10px 12px;
-            border-radius: 6px;
+            padding: 11px 12px;
+            border-radius: 10px;
             font-size: 12px;
-            line-height: 1.4;
+            line-height: 1.45;
         }
         .alert-warn  { background: #2a2000; border: 1px solid #5a4000; color: var(--warn); }
         .alert-error { background: #200808; border: 1px solid #4a1515; color: var(--danger); }
 
         /* ── Right content ── */
-        .right-content { display: flex; flex-direction: column; gap: 16px; }
+        .right-content { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+        #results-sections { display: flex; flex-direction: column; gap: 18px; }
 
         /* ── Section label ── */
         .section-label {
             font-family: var(--mono);
-            font-size: 10px;
+            font-size: 11px;
             letter-spacing: 2px;
             color: var(--muted);
             text-transform: uppercase;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
+        }
+        .section-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 18px;
+            margin-bottom: 16px;
+        }
+        .section-head h2 { font-size: 22px; line-height: 1.2; }
+        .section-head p { color: var(--muted); font-size: 14px; line-height: 1.55; max-width: 680px; margin-top: 6px; }
+
+        /* ── Prediction hero ── */
+        .prediction-hero {
+            display: grid;
+            grid-template-columns: minmax(280px, 1fr) minmax(260px, .9fr);
+            gap: 16px;
+            align-items: stretch;
+            background:
+                linear-gradient(135deg, rgba(74,240,196,.12), rgba(67,97,238,.08)),
+                rgba(21, 25, 34, .94);
+        }
+        .main-prediction {
+            padding: 20px;
+            border: 1px solid rgba(74,240,196,.18);
+            border-radius: 16px;
+            background: rgba(5, 12, 17, .34);
+            min-height: 150px;
+        }
+        .main-prediction .eyebrow {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--muted);
+            letter-spacing: 1.6px;
+            text-transform: uppercase;
+        }
+        .main-prediction .label {
+            margin-top: 10px;
+            color: var(--accent);
+            font-size: clamp(34px, 5vw, 64px);
+            line-height: 1.02;
+            font-weight: 800;
+            letter-spacing: -1.4px;
+        }
+        .main-prediction .meta {
+            margin-top: 12px;
+            color: var(--muted);
+            font-size: 15px;
+        }
+        .result-list {
+            display: grid;
+            gap: 10px;
+            align-content: start;
+            max-height: 300px;
+            overflow: auto;
+            padding-right: 4px;
+        }
+        .result-chip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 13px;
+            border-radius: 13px;
+            border: 1px solid var(--border);
+            background: var(--surface3);
+        }
+        .result-chip .roi-name { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+        .result-chip .roi-label-small { font-weight: 700; color: var(--text); margin-top: 2px; }
+        .result-chip .score { font-family: var(--mono); font-size: 12px; color: var(--accent); white-space: nowrap; }
+
+        @media (max-width: 1120px) {
+            .prediction-hero { grid-template-columns: 1fr; }
         }
 
         /* ── Pipeline strip ── */
-        .pipeline-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .pipeline-card { padding: 16px 18px; }
+        .pipeline-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
         .pipeline-step {
             background: var(--surface2);
             border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 6px 12px;
+            border-radius: 999px;
+            padding: 8px 12px;
             font-family: var(--mono);
-            font-size: 10px;
+            font-size: 11px;
             color: var(--accent);
             white-space: nowrap;
         }
-        .pipeline-arrow { color: var(--border); font-size: 14px; }
+        .pipeline-arrow { color: var(--muted2); font-size: 15px; }
 
         /* ── Image grid ── */
         .overview-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+        }
+        @media (max-width: 1180px) {
+            .overview-grid { grid-template-columns: 1fr; }
         }
         .img-card {
-            background: var(--surface2);
+            background: linear-gradient(180deg, rgba(30,36,51,.96), rgba(18,22,31,.96));
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 12px;
+            border-radius: 16px;
+            padding: 14px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 12px;
+            min-width: 0;
         }
-        .img-card .step-num   { font-family: var(--mono); font-size: 9px; color: var(--muted); }
-        .img-card .step-title { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .img-card .step-desc  {
+        .step-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .img-card .step-num {
+            font-family: var(--mono);
             font-size: 10px;
+            color: var(--accent);
+            background: rgba(74,240,196,.1);
+            border: 1px solid rgba(74,240,196,.22);
+            border-radius: 999px;
+            padding: 5px 8px;
+            white-space: nowrap;
+        }
+        .img-card .step-title { font-size: 18px; font-weight: 700; line-height: 1.2; }
+        .img-card .step-desc  {
+            margin-top: 4px;
+            font-size: 13px;
             color: var(--muted);
-            line-height: 1.4;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
+            line-height: 1.45;
         }
         .img-frame {
             width: 100%;
-            aspect-ratio: 1/1;
-            max-height: 180px;
+            min-height: clamp(260px, 28vw, 440px);
+            aspect-ratio: 16 / 10;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #0a0c10;
-            border-radius: 6px;
+            background:
+                linear-gradient(45deg, rgba(255,255,255,.025) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.025) 75%),
+                #070910;
+            background-size: 22px 22px;
+            border: 1px solid rgba(255,255,255,.05);
+            border-radius: 12px;
             overflow: hidden;
         }
-        .img-frame img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; }
-        .img-frame.hog-frame { background: #060810; }
+        .img-frame img { max-width: 100%; max-height: 100%; width: 100%; height: 100%; object-fit: contain; border-radius: 8px; }
+        .img-frame.hog-frame { background: #04060b; }
 
         /* ── ROI results ── */
-        .roi-list { display: flex; flex-direction: column; gap: 16px; }
-        .roi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+        .roi-list { display: flex; flex-direction: column; gap: 18px; }
+        .roi-card {
+            background: rgba(17, 21, 30, .94);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
         .roi-header {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 14px;
             align-items: center;
-            justify-content: space-between;
-            padding: 10px 16px;
-            background: var(--surface2);
+            padding: 16px 18px;
+            background: linear-gradient(90deg, rgba(74,240,196,.1), rgba(67,97,238,.08));
             border-bottom: 1px solid var(--border);
         }
-        .roi-index { font-family: var(--mono); font-size: 10px; color: var(--muted); }
-        .roi-label { font-size: 16px; font-weight: 700; color: var(--accent); letter-spacing: .5px; }
+        .roi-index { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+        .roi-label { display: block; margin-top: 4px; font-size: 28px; font-weight: 800; color: var(--accent); letter-spacing: -.5px; }
         .roi-score {
-            font-family: var(--mono); font-size: 11px; background: #0a2e24;
-            color: var(--accent); border: 1px solid #1a5040; padding: 4px 10px; border-radius: 20px;
+            font-family: var(--mono); font-size: 14px;
+            background: rgba(10, 46, 36, .95);
+            color: var(--accent);
+            border: 1px solid #1a5040;
+            padding: 8px 12px;
+            border-radius: 999px;
+            white-space: nowrap;
         }
-        .roi-body { padding: 12px; }
-        .roi-pipeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-        .roi-step { display: flex; flex-direction: column; gap: 6px; }
-        .roi-step .step-label { font-size: 10px; color: var(--muted); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .roi-body { padding: 16px; }
+        .roi-pipeline {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(170px, 1fr));
+            gap: 14px;
+        }
+        @media (max-width: 1280px) {
+            .roi-pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 700px) {
+            .roi-pipeline { grid-template-columns: 1fr; }
+        }
+        .roi-step {
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 12px;
+        }
+        .roi-step .step-label {
+            font-size: 11px;
+            color: var(--muted);
+            font-family: var(--mono);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .roi-step .img-frame {
+            min-height: clamp(210px, 17vw, 300px);
+            aspect-ratio: 1 / 1;
+        }
+
         .placeholder-text { color: var(--muted); font-style: italic; }
         .placeholder-score { color: var(--muted); background: #1a1f2a; border-color: var(--border); }
-        .placeholder-frame { color: var(--muted); font-size: 11px; border: 1px dashed var(--border); background: #0f131a; }
+        .placeholder-frame { color: var(--muted); font-size: 12px; border: 1px dashed var(--border); background: #0f131a; }
         .is-hidden { display: none !important; }
 
         /* ── Empty state ── */
         .empty-state {
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            padding: 60px 40px; gap: 12px; color: var(--muted);
-            border: 2px dashed var(--border); border-radius: 12px;
+            min-height: 620px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 70px 40px;
+            gap: 14px;
+            color: var(--muted);
+            border: 2px dashed var(--border);
+            border-radius: 18px;
+            background: rgba(21, 25, 34, .55);
         }
-        .empty-state .big-icon { font-size: 40px; opacity: .4; }
-        .empty-state p { font-size: 13px; text-align: center; line-height: 1.6; }
+        .empty-state .big-icon { font-size: 56px; opacity: .45; }
+        .empty-state h2 { color: var(--text); font-size: 26px; }
+        .empty-state p { font-size: 14px; text-align: center; line-height: 1.65; max-width: 520px; }
     </style>
 </head>
 <body>
 
 <header class="header">
-    <div><span class="header-badge">SVM + HOG</span></div>
-    <div>
-        <h1>Traffic Sign Classifier</h1>
-        <p>Color masking → Contour detection → Shape filtering → HOG → SVM predict</p>
+    <div class="brand">
+        <div><span class="header-badge">SVM + HOG</span></div>
+        <div>
+            <h1>Traffic Sign Classifier</h1>
+            <p>Demo nhận dạng 5 loại biển báo: Cấm · Chỉ dẫn · Hiệu lệnh · Nguy hiểm · Phụ</p>
+        </div>
+    </div>
+    <div class="header-note">
+        Giao diện này ưu tiên trình bày từng bước xử lý ảnh, phù hợp để thuyết trình pipeline trước khi đưa HOG feature vào SVM.
     </div>
 </header>
 
@@ -250,33 +490,47 @@
 
     <!-- ── Upload panel ── -->
     <aside class="card upload-panel">
-        <h2>Upload Image</h2>
+        <div class="panel-title">Input</div>
 
-        <!-- FastAPI processes multipart/form-data POSTs at the same "/" route -->
         <form id="upload-form" method="POST" action="http://localhost:5000/api/predict" enctype="multipart/form-data">
             <div class="drop-zone">
                 <div class="icon">🖼️</div>
-                <p>Drag &amp; drop or <strong>choose a file</strong></p>
+                <p>Drag &amp; drop hoặc <strong>chọn ảnh biển báo</strong></p>
                 <input id="file-input" type="file" name="file" accept="image/*" required>
             </div>
-            <button id="submit-btn" type="submit" class="btn">▶ Analyze &amp; Predict</button>
+            <div id="file-name" class="file-name">Chưa chọn ảnh.</div>
+
+            <div class="mask-toggle">
+                <input type="checkbox" id="use-masking-checkbox" name="use_masking" checked>
+                <label for="use-masking-checkbox">
+                    Sử dụng Color Masking &amp; Shape Detection
+                    <small>Tách vùng nghi ngờ là biển báo trước khi phân loại.</small>
+                </label>
+            </div>
+
+            <button id="submit-btn" type="submit" class="btn">Analyze &amp; Predict</button>
         </form>
 
         <div id="error-box" class="alert alert-error is-hidden"></div>
 
         <div id="fallback-box" class="alert alert-warn is-hidden">
-            ⚠️ <b>Warning:</b> No sign region detected via color masking.<br>
-            Using the <b>full image</b> as a fallback — accuracy may be lower.
-            Try cropping the image closer to the sign.
+            ⚠️ <b>Warning:</b> Không phát hiện được ROI bằng color masking.<br>
+            Hệ thống đang dùng crop trung tâm / fallback nên độ chính xác có thể thấp hơn.
         </div>
-        <div style="margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px;">
-            <div class="section-label">Classification Results</div>
-            <div id="classification-results">
-                <div style="margin-bottom: 12px;">
-                    <div style="font-size: 11px; color: var(--muted); font-family: var(--mono);">ROI 1</div>
-                    <div style="font-size: 22px; font-weight: 700;" class="placeholder-text">Awaiting upload</div>
-                    <div style="font-size: 12px; color: var(--muted);">Confidence: <b style="color: var(--muted)">--</b></div>
-                </div>
+
+        <div class="legend">
+            <div class="panel-title" style="margin-bottom: 0;">Demo Flow</div>
+            <div class="legend-row">
+                <div class="legend-num">1</div>
+                <div><b>Detect ROI</b><span>Mask màu, làm sạch mask, tìm contour và lọc hình dạng.</span></div>
+            </div>
+            <div class="legend-row">
+                <div class="legend-num">2</div>
+                <div><b>Prepare Image</b><span>Crop ROI, resize về 64×64 và chuyển grayscale.</span></div>
+            </div>
+            <div class="legend-row">
+                <div class="legend-num">3</div>
+                <div><b>Classify</b><span>Trích xuất HOG feature rồi đưa vào model SVM.</span></div>
             </div>
         </div>
     </aside>
@@ -284,20 +538,43 @@
     <!-- ── Right content ── -->
     <main class="right-content">
         <div id="results-sections" class="is-hidden">
+            <!-- Prediction summary -->
+            <div class="card prediction-hero">
+                <div class="main-prediction" id="main-prediction">
+                    <div class="eyebrow">Final prediction</div>
+                    <div class="label placeholder-text">Awaiting upload</div>
+                    <div class="meta">Confidence: -- · ROI: --</div>
+                </div>
+                <div>
+                    <div class="section-label">Classification Results</div>
+                    <div id="classification-results" class="result-list">
+                        <div class="result-chip">
+                            <div>
+                                <div class="roi-name">ROI 1</div>
+                                <div class="roi-label-small placeholder-text">Awaiting upload</div>
+                            </div>
+                            <div class="score">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Pipeline overview -->
-            <div class="card">
+            <div class="card pipeline-card">
                 <div class="section-label">Pipeline</div>
                 <div class="pipeline-strip">
                     <span class="pipeline-step">Upload</span>
                     <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Color Mask</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Clean Mask</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Contour + Shape</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Crop ROI</span>
-                    <span class="pipeline-arrow">→</span>
+                    <span id="masking-pipeline-steps" style="display: contents;">
+                        <span class="pipeline-step">Color Mask</span>
+                        <span class="pipeline-arrow">→</span>
+                        <span class="pipeline-step">Clean Mask</span>
+                        <span class="pipeline-arrow">→</span>
+                        <span class="pipeline-step">Contour + Shape</span>
+                        <span class="pipeline-arrow">→</span>
+                        <span class="pipeline-step">Crop ROI</span>
+                        <span class="pipeline-arrow">→</span>
+                    </span>
                     <span class="pipeline-step">Resize 64×64</span>
                     <span class="pipeline-arrow">→</span>
                     <span class="pipeline-step">Grayscale</span>
@@ -310,59 +587,80 @@
 
             <!-- Stages 1–4 overview images -->
             <div class="card">
-                <div class="section-label">Stages 1–4 · Sign Region Detection</div>
-                <div class="overview-grid">
+                <div class="section-head">
+                    <div>
+                        <div class="section-label">Stages 1–4</div>
+                        <h2>Sign Region Detection</h2>
+                    </div>
+                    <p>Nhóm ảnh này giải thích cách hệ thống tìm vùng biển báo trong ảnh gốc trước khi đưa ROI sang pipeline HOG + SVM.</p>
+                </div>
 
+                <div class="overview-grid">
                     <div class="img-card">
-                        <div>
+                        <div class="step-top">
+                            <div>
+                                <div class="step-title">Original Image</div>
+                                <div class="step-desc">Ảnh đầu vào người dùng upload.</div>
+                            </div>
                             <div class="step-num">STAGE 1</div>
-                            <div class="step-title">Original Image</div>
-                            <div class="step-desc">Input image as uploaded.</div>
                         </div>
                         <div class="img-frame"><img id="img-original" alt="Original"></div>
                     </div>
 
-                    <div class="img-card">
-                        <div>
-                            <div class="step-num">STAGE 2</div>
-                            <div class="step-title">Color Mask</div>
-                            <div class="step-desc">HSV ranges for red, blue, yellow, orange.</div>
+                    <div id="masking-image-cards" style="display: contents;">
+                        <div class="img-card">
+                            <div class="step-top">
+                                <div>
+                                    <div class="step-title">Color Mask</div>
+                                    <div class="step-desc">Lọc màu HSV cho đỏ, xanh, vàng, cam và trắng.</div>
+                                </div>
+                                <div class="step-num">STAGE 2</div>
+                            </div>
+                            <div class="img-frame"><img id="img-raw-mask" alt="Raw mask"></div>
                         </div>
-                        <div class="img-frame"><img id="img-raw-mask" alt="Raw mask"></div>
-                    </div>
 
-                    <div class="img-card">
-                        <div>
-                            <div class="step-num">STAGE 3</div>
-                            <div class="step-title">Clean Mask</div>
-                            <div class="step-desc">Open → Close → Dilate.</div>
+                        <div class="img-card">
+                            <div class="step-top">
+                                <div>
+                                    <div class="step-title">Clean Mask</div>
+                                    <div class="step-desc">Khử nhiễu bằng Gaussian blur, open, close và dilate.</div>
+                                </div>
+                                <div class="step-num">STAGE 3</div>
+                            </div>
+                            <div class="img-frame"><img id="img-clean-mask" alt="Clean mask"></div>
                         </div>
-                        <div class="img-frame"><img id="img-clean-mask" alt="Clean mask"></div>
-                    </div>
 
-                    <div class="img-card">
-                        <div>
-                            <div class="step-num">STAGE 4</div>
-                            <div class="step-title">Bounding Boxes</div>
-                            <div class="step-desc">Shape filter + NMS.</div>
+                        <div class="img-card">
+                            <div class="step-top">
+                                <div>
+                                    <div class="step-title">Bounding Boxes</div>
+                                    <div class="step-desc">Lọc contour theo diện tích, tỉ lệ, hình dạng và NMS.</div>
+                                </div>
+                                <div class="step-num">STAGE 4</div>
+                            </div>
+                            <div class="img-frame"><img id="img-boxed" alt="Boxed"></div>
                         </div>
-                        <div class="img-frame"><img id="img-boxed" alt="Boxed"></div>
                     </div>
-
                 </div>
             </div>
 
             <!-- Per-ROI feature extraction -->
             <div class="roi-section card">
-                <div class="section-label">Stages 5–9 · Feature Extraction per ROI</div>
+                <div class="section-head">
+                    <div>
+                        <div class="section-label">Stages 5–9</div>
+                        <h2>Feature Extraction per ROI</h2>
+                    </div>
+                    <p>Mỗi ROI được crop riêng, resize, chuyển xám, trực quan hóa HOG rồi mới dự đoán nhãn bằng SVM.</p>
+                </div>
                 <div class="roi-list" id="roi-list"></div>
             </div>
         </div>
 
         <div id="empty-state" class="empty-state">
             <div class="big-icon">🚦</div>
-            <p>Upload a traffic sign image to get started.<br>
-            Each pipeline stage will be visualized here.</p>
+            <h2>Upload ảnh để bắt đầu demo</h2>
+            <p>Sau khi phân tích, từng giai đoạn xử lý ảnh sẽ hiện ở kích thước lớn để bạn dễ giải thích trong lúc thuyết trình.</p>
         </div>
 
     </main>
@@ -390,12 +688,14 @@
         form.action = apiUrl;
 
         const fileInput = document.getElementById("file-input");
+        const fileName = document.getElementById("file-name");
         const submitBtn = document.getElementById("submit-btn");
         const errorBox = document.getElementById("error-box");
         const fallbackBox = document.getElementById("fallback-box");
         const resultsSections = document.getElementById("results-sections");
         const emptyState = document.getElementById("empty-state");
         const classificationResults = document.getElementById("classification-results");
+        const mainPrediction = document.getElementById("main-prediction");
         const roiList = document.getElementById("roi-list");
 
         let hasResults = false;
@@ -426,6 +726,33 @@
             }
         };
 
+        const formatScore = (score) => {
+            return (score === null || score === undefined) ? "--" : `${score}%`;
+        };
+
+        const renderMainPrediction = (roiResults) => {
+            if (!mainPrediction) {
+                return;
+            }
+            if (!roiResults || roiResults.length === 0) {
+                mainPrediction.innerHTML = `
+                    <div class="eyebrow">Final prediction</div>
+                    <div class="label placeholder-text">No ROI</div>
+                    <div class="meta">Confidence: -- · ROI: 0</div>
+                `;
+                return;
+            }
+
+            const first = roiResults[0];
+            const label = escapeHtml(first.label ?? "Unknown");
+            const score = escapeHtml(formatScore(first.score));
+            mainPrediction.innerHTML = `
+                <div class="eyebrow">Final prediction · ROI 1</div>
+                <div class="label">${label}</div>
+                <div class="meta">Confidence: <b style="color: var(--text)">${score}</b> · Total ROI: ${roiResults.length}</div>
+            `;
+        };
+
         const renderClassification = (roiResults) => {
             if (!classificationResults) {
                 return;
@@ -433,26 +760,33 @@
 
             if (!roiResults || roiResults.length === 0) {
                 classificationResults.innerHTML = `
-                    <div style="margin-bottom: 12px;">
-                        <div style="font-size: 11px; color: var(--muted); font-family: var(--mono);">ROI 1</div>
-                        <div style="font-size: 22px; font-weight: 700;" class="placeholder-text">Awaiting upload</div>
-                        <div style="font-size: 12px; color: var(--muted);">Confidence: <b style="color: var(--muted)">--</b></div>
+                    <div class="result-chip">
+                        <div>
+                            <div class="roi-name">ROI 1</div>
+                            <div class="roi-label-small placeholder-text">No ROI detected</div>
+                        </div>
+                        <div class="score">--</div>
                     </div>
                 `;
+                renderMainPrediction([]);
                 return;
             }
 
             classificationResults.innerHTML = roiResults.map((r, idx) => {
                 const label = escapeHtml(r.label ?? "Unknown");
-                const score = (r.score === null || r.score === undefined) ? "--" : `${r.score}%`;
+                const score = escapeHtml(formatScore(r.score));
                 return `
-                    <div style="margin-bottom: 12px;">
-                        <div style="font-size: 11px; color: var(--muted); font-family: var(--mono);">ROI ${idx + 1}</div>
-                        <div style="font-size: 22px; font-weight: 700; color: var(--accent);">${label}</div>
-                        <div style="font-size: 12px; color: var(--muted);">Confidence: <b style="color: var(--text)">${escapeHtml(score)}</b></div>
+                    <div class="result-chip">
+                        <div>
+                            <div class="roi-name">ROI ${idx + 1}</div>
+                            <div class="roi-label-small">${label}</div>
+                        </div>
+                        <div class="score">${score}</div>
                     </div>
                 `;
             }).join("");
+
+            renderMainPrediction(roiResults);
         };
 
         const renderRoiList = (roiResults) => {
@@ -464,8 +798,10 @@
                 roiList.innerHTML = `
                     <div class="roi-card">
                         <div class="roi-header">
-                            <span class="roi-index">ROI - / 0</span>
-                            <span class="roi-label placeholder-text">No ROI detected</span>
+                            <div>
+                                <span class="roi-index">ROI - / 0</span>
+                                <span class="roi-label placeholder-text">No ROI detected</span>
+                            </div>
                             <span class="roi-score placeholder-score">--</span>
                         </div>
                         <div class="roi-body">
@@ -475,7 +811,7 @@
                                     <div class="img-frame placeholder-frame">Awaiting input</div>
                                 </div>
                                 <div class="roi-step">
-                                    <span class="step-label">STAGE 6 · Resize 64x64</span>
+                                    <span class="step-label">STAGE 6 · Resize 64×64</span>
                                     <div class="img-frame placeholder-frame">Awaiting input</div>
                                 </div>
                                 <div class="roi-step">
@@ -495,13 +831,15 @@
 
             roiList.innerHTML = roiResults.map((r, idx) => {
                 const label = escapeHtml(r.label ?? "Unknown");
-                const score = (r.score === null || r.score === undefined) ? "--" : `${r.score}%`;
+                const score = escapeHtml(formatScore(r.score));
                 return `
                     <div class="roi-card">
                         <div class="roi-header">
-                            <span class="roi-index">ROI ${idx + 1} / ${roiResults.length}</span>
-                            <span class="roi-label">${label}</span>
-                            <span class="roi-score">${escapeHtml(score)}</span>
+                            <div>
+                                <span class="roi-index">ROI ${idx + 1} / ${roiResults.length}</span>
+                                <span class="roi-label">${label}</span>
+                            </div>
+                            <span class="roi-score">${score}</span>
                         </div>
                         <div class="roi-body">
                             <div class="roi-pipeline">
@@ -510,7 +848,7 @@
                                     <div class="img-frame"><img src="${r.crop_b64 || ""}" alt="Crop"></div>
                                 </div>
                                 <div class="roi-step">
-                                    <span class="step-label">STAGE 6 · Resize 64x64</span>
+                                    <span class="step-label">STAGE 6 · Resize 64×64</span>
                                     <div class="img-frame"><img src="${r.resized_b64 || ""}" alt="Resized"></div>
                                 </div>
                                 <div class="roi-step">
@@ -528,6 +866,16 @@
             }).join("");
         };
 
+        if (fileInput) {
+            fileInput.addEventListener("change", () => {
+                if (!fileName) {
+                    return;
+                }
+                const file = fileInput.files && fileInput.files[0];
+                fileName.textContent = file ? `Đã chọn: ${file.name}` : "Chưa chọn ảnh.";
+            });
+        }
+
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
             setHidden(errorBox, true);
@@ -544,8 +892,12 @@
             const formData = new FormData();
             formData.append("file", fileInput.files[0]);
 
+            const useMaskingCheckbox = document.getElementById("use-masking-checkbox");
+            formData.append("use_masking", useMaskingCheckbox && useMaskingCheckbox.checked ? "true" : "false");
+
             if (submitBtn) {
                 submitBtn.disabled = true;
+                submitBtn.textContent = "Analyzing...";
             }
 
             try {
@@ -597,9 +949,29 @@
             } finally {
                 if (submitBtn) {
                     submitBtn.disabled = false;
+                    submitBtn.textContent = "Analyze & Predict";
                 }
             }
         });
+
+        const useMaskingCheckbox = document.getElementById("use-masking-checkbox");
+        const maskingPipelineSteps = document.getElementById("masking-pipeline-steps");
+        const maskingImageCards = document.getElementById("masking-image-cards");
+
+        const updateMaskingVisibility = () => {
+            const isMasking = useMaskingCheckbox ? useMaskingCheckbox.checked : true;
+            if (maskingPipelineSteps) {
+                maskingPipelineSteps.classList.toggle("is-hidden", !isMasking);
+            }
+            if (maskingImageCards) {
+                maskingImageCards.classList.toggle("is-hidden", !isMasking);
+            }
+        };
+
+        if (useMaskingCheckbox) {
+            useMaskingCheckbox.addEventListener("change", updateMaskingVisibility);
+            updateMaskingVisibility();
+        }
     })();
 </script>
 
