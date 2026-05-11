@@ -3,288 +3,411 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Traffic Sign Classifier — SVM + HOG Demo</title>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <title>Traffic Sign Classifier — SVM vs CNN</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg:        #0d0f14;
-            --surface:   #161923;
-            --surface2:  #1e2433;
-            --border:    #2a3347;
-            --accent:    #4af0c4;
-            --accent2:   #4361ee;
-            --warn:      #f9a825;
-            --danger:    #ef5350;
-            --text:      #e8edf5;
-            --muted:     #6b7a99;
-            --mono:      'Space Mono', monospace;
-            --sans:      'DM Sans', sans-serif;
+            --bg:            #0b0f16;
+            --surface:       #141a26;
+            --surface-2:     #1b2230;
+            --border:        #2a354a;
+            --accent-svm:    #4af0c4;
+            --accent-cnn:    #ff8a5c;
+            --accent-ink:    #131b21;
+            --text:          #e7eef7;
+            --muted:         #7b8ca9;
+            --mono:          "Space Mono", monospace;
+            --sans:          "Plus Jakarta Sans", sans-serif;
         }
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
             font-family: var(--sans);
-            background: var(--bg);
+            background: radial-gradient(circle at top left, #121a2a 0%, #0b0f16 48%) fixed;
             color: var(--text);
             min-height: 100vh;
+            padding: 20px 24px 64px;
             overflow-x: hidden;
-            padding: 16px 24px;
         }
 
-        /* ── Header ── */
-        .header {
-            max-width: 1440px;
-            margin: 0 auto 20px;
-            display: flex;
-            align-items: flex-end;
-            gap: 20px;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 12px;
+        .bg-orb {
+            position: fixed;
+            width: 420px;
+            height: 420px;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.4;
+            z-index: -1;
         }
-        .header-badge {
-            font-family: var(--mono);
-            font-size: 10px;
-            background: var(--accent);
-            color: #000;
-            padding: 4px 10px;
-            border-radius: 4px;
-            letter-spacing: 1.5px;
-            font-weight: 700;
-            align-self: center;
-        }
-        .header h1 { font-size: clamp(18px, 2.5vw, 24px); font-weight: 600; line-height: 1.2; }
-        .header p  { font-size: 13px; color: var(--muted); margin-top: 4px; }
+        .orb-1 { background: #3a5d8c; top: -120px; left: -80px; }
+        .orb-2 { background: #9a4d3d; bottom: -140px; right: -80px; }
 
-        /* ── Main layout ── */
-        .main {
-            max-width: 1440px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: 280px 1fr;
-            gap: 20px;
-            align-items: start;
-        }
-        @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
-
-        /* ── Card ── */
         .card {
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 12px;
+            border-radius: 14px;
             padding: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
         }
 
-        /* ── Upload panel ── */
-        .upload-panel h2 {
+        .header {
+            max-width: 1400px;
+            margin: 0 auto 18px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .badge {
             font-family: var(--mono);
+            font-size: 10px;
+            letter-spacing: 2px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: var(--accent-svm);
+            color: #061016;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .header h1 {
+            font-size: clamp(20px, 3vw, 30px);
+            font-weight: 600;
+        }
+        .header p {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 4px;
+        }
+        .header-meta {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--muted);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .upload-center {
+            max-width: 680px;
+            margin: 0 auto 24px;
+            text-align: center;
+            animation: fadeUp 0.5s ease-out;
+        }
+        .upload-title {
+            font-family: var(--mono);
+            text-transform: uppercase;
             font-size: 11px;
             letter-spacing: 2px;
             color: var(--muted);
-            text-transform: uppercase;
-            margin-bottom: 14px;
+            margin-bottom: 12px;
         }
 
         .drop-zone {
             border: 2px dashed var(--border);
-            border-radius: 8px;
-            padding: 20px 12px;
+            border-radius: 12px;
+            padding: 24px 18px;
             text-align: center;
-            background: var(--surface2);
+            background: var(--surface-2);
             transition: border-color .2s, background .2s;
             cursor: pointer;
             position: relative;
         }
-        .drop-zone:hover { border-color: var(--accent); background: #1a2135; }
+        .drop-zone:hover { border-color: var(--accent-svm); background: #192233; }
         .drop-zone input[type="file"] {
             position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
         }
-        .drop-zone .icon { font-size: 28px; margin-bottom: 8px; }
-        .drop-zone p { font-size: 13px; color: var(--muted); }
-        .drop-zone strong { color: var(--accent); }
+        .drop-zone p { font-size: 14px; color: var(--muted); }
+        .drop-zone strong { color: var(--accent-svm); }
 
         .btn {
-            display: block;
             width: 100%;
-            margin-top: 12px;
+            margin-top: 14px;
             padding: 12px;
-            background: var(--accent2);
-            color: #fff;
+            background: linear-gradient(120deg, #4af0c4, #3aa6f7);
+            color: #051018;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             font-family: var(--sans);
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: background .2s, transform .15s;
+            transition: transform .15s, filter .2s;
         }
-        .btn:hover  { background: #3354d4; transform: translateY(-1px); }
+        .btn:hover { filter: brightness(1.05); transform: translateY(-1px); }
         .btn:active { transform: translateY(0); }
 
-        /* ── Alert boxes ── */
         .alert {
             margin-top: 12px;
             padding: 10px 12px;
-            border-radius: 6px;
+            border-radius: 8px;
             font-size: 12px;
             line-height: 1.4;
         }
-        .alert-warn  { background: #2a2000; border: 1px solid #5a4000; color: var(--warn); }
-        .alert-error { background: #200808; border: 1px solid #4a1515; color: var(--danger); }
+        .alert-warn  { background: #2b2000; border: 1px solid #5d4a1b; color: #f5b44b; }
+        .alert-error { background: #231011; border: 1px solid #5b1e21; color: #ff7f7f; }
+        .is-hidden { display: none !important; }
 
-        /* ── Right content ── */
-        .right-content { display: flex; flex-direction: column; gap: 16px; }
+        .results {
+            max-width: 1400px;
+            margin: 0 auto;
+            animation: fadeUp 0.5s ease-out;
+        }
+        .columns {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+        }
+        @media (max-width: 1100px) { .columns { grid-template-columns: 1fr; } }
 
-        /* ── Section label ── */
+        .column {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            --accent-color: var(--accent-svm);
+        }
+        .column-svm { order: 2; }
+        .column-cnn { --accent-color: var(--accent-cnn); order: 1; }
+
+        .column-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            background: linear-gradient(120deg, rgba(73, 240, 196, 0.12), rgba(24, 40, 59, 0.4));
+            border: 1px solid var(--border);
+        }
+        .column-cnn .column-header {
+            background: linear-gradient(120deg, rgba(255, 138, 92, 0.18), rgba(28, 22, 18, 0.6));
+        }
+        .column-badge {
+            font-family: var(--mono);
+            font-size: 10px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: var(--accent-color);
+            color: var(--accent-ink);
+            font-weight: 700;
+        }
+        .column-title {
+            font-size: 15px;
+            font-weight: 600;
+        }
+        .column-subtitle {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
         .section-label {
             font-family: var(--mono);
             font-size: 10px;
             letter-spacing: 2px;
-            color: var(--muted);
             text-transform: uppercase;
+            color: var(--muted);
             margin-bottom: 12px;
         }
 
-        /* ── Pipeline strip ── */
         .pipeline-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
         .pipeline-step {
-            background: var(--surface2);
+            background: var(--surface-2);
             border: 1px solid var(--border);
-            border-radius: 6px;
+            border-radius: 999px;
             padding: 6px 12px;
             font-family: var(--mono);
             font-size: 10px;
-            color: var(--accent);
+            color: var(--accent-color);
             white-space: nowrap;
         }
         .pipeline-arrow { color: var(--border); font-size: 14px; }
 
-        /* ── Image grid ── */
         .overview-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 12px;
         }
+        @media (max-width: 900px) { .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
         .img-card {
-            background: var(--surface2);
+            background: var(--surface-2);
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 10px;
             padding: 12px;
             display: flex;
             flex-direction: column;
             gap: 8px;
         }
-        .img-card .step-num   { font-family: var(--mono); font-size: 9px; color: var(--muted); }
-        .img-card .step-title { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .img-card .step-desc  {
-            font-size: 10px;
-            color: var(--muted);
-            line-height: 1.4;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
+        .img-card .step-num { font-family: var(--mono); font-size: 9px; color: var(--muted); }
+        .img-card .step-title { font-size: 12px; font-weight: 600; }
+        .img-card .step-desc  { font-size: 10px; color: var(--muted); line-height: 1.4; }
+
         .img-frame {
             width: 100%;
             aspect-ratio: 1/1;
-            max-height: 180px;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #0a0c10;
-            border-radius: 6px;
+            background: #0a0f17;
+            border-radius: 8px;
             overflow: hidden;
         }
-        .img-frame img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; }
-        .img-frame.hog-frame { background: #060810; }
+        .img-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .predict-frame {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text);
+        }
+        .predict-frame .predict-label { font-size: 14px; font-weight: 700; color: var(--accent-color); }
 
-        /* ── ROI results ── */
+        .classification-list {
+            display: grid;
+            gap: 12px;
+        }
+        .classification-item {
+            padding: 12px;
+            border-radius: 10px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+        }
+        .classification-item .label {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent-color);
+        }
+        .classification-item .meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
         .roi-list { display: flex; flex-direction: column; gap: 16px; }
-        .roi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+        .roi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
         .roi-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 10px 16px;
-            background: var(--surface2);
+            background: var(--surface-2);
             border-bottom: 1px solid var(--border);
         }
         .roi-index { font-family: var(--mono); font-size: 10px; color: var(--muted); }
-        .roi-label { font-size: 16px; font-weight: 700; color: var(--accent); letter-spacing: .5px; }
+        .roi-label { font-size: 15px; font-weight: 700; color: var(--accent-color); }
         .roi-score {
-            font-family: var(--mono); font-size: 11px; background: #0a2e24;
-            color: var(--accent); border: 1px solid #1a5040; padding: 4px 10px; border-radius: 20px;
+            font-family: var(--mono);
+            font-size: 11px;
+            background: rgba(74, 240, 196, 0.15);
+            color: var(--accent-color);
+            border: 1px solid rgba(74, 240, 196, 0.3);
+            padding: 4px 10px;
+            border-radius: 999px;
+        }
+        .column-cnn .roi-score {
+            background: rgba(255, 138, 92, 0.15);
+            border-color: rgba(255, 138, 92, 0.3);
         }
         .roi-body { padding: 12px; }
-        .roi-pipeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-        .roi-step { display: flex; flex-direction: column; gap: 6px; }
-        .roi-step .step-label { font-size: 10px; color: var(--muted); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .placeholder-text { color: var(--muted); font-style: italic; }
-        .placeholder-score { color: var(--muted); background: #1a1f2a; border-color: var(--border); }
-        .placeholder-frame { color: var(--muted); font-size: 11px; border: 1px dashed var(--border); background: #0f131a; }
-        .is-hidden { display: none !important; }
+        .roi-pipeline { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+        .roi-pipeline.svm { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .roi-pipeline.cnn-main { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .roi-pipeline.cnn-final { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px; }
+        @media (max-width: 900px) { .roi-pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-        /* ── Empty state ── */
-        .empty-state {
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            padding: 60px 40px; gap: 12px; color: var(--muted);
-            border: 2px dashed var(--border); border-radius: 12px;
+        .roi-step { display: flex; flex-direction: column; gap: 6px; }
+        .step-label {
+            font-size: 10px;
+            color: var(--muted);
+            font-family: var(--mono);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-        .empty-state .big-icon { font-size: 40px; opacity: .4; }
-        .empty-state p { font-size: 13px; text-align: center; line-height: 1.6; }
+
+        .feature-grid {
+            margin-top: 12px;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+        @media (max-width: 900px) { .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        .feature-card {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .placeholder-text { color: var(--muted); font-style: italic; }
+        .placeholder-frame { color: var(--muted); font-size: 11px; border: 1px dashed var(--border); background: #101621; }
+        .empty-state {
+            max-width: 860px;
+            margin: 30px auto 0;
+            padding: 60px 40px;
+            text-align: center;
+            color: var(--muted);
+            border: 2px dashed var(--border);
+            border-radius: 16px;
+        }
+        .empty-state p { font-size: 14px; line-height: 1.6; }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
 <body>
 
+<div class="bg-orb orb-1"></div>
+<div class="bg-orb orb-2"></div>
+
 <header class="header">
-    <div><span class="header-badge">SVM + HOG</span></div>
-    <div>
-        <h1>Traffic Sign Classifier</h1>
-        <p>Color masking → Contour detection → Shape filtering → HOG → SVM predict</p>
+    <div class="header-left">
+        <span class="badge">Vision Lab</span>
+        <div>
+            <h1>Traffic Sign Classifier</h1>
+            <p>Side-by-side comparison of CNN and SVM HOG with feature visualization.</p>
+        </div>
     </div>
+    <div class="header-meta">Upload one image and compare the pipelines</div>
 </header>
 
-<div class="main">
-
-    <!-- ── Upload panel ── -->
-    <aside class="card upload-panel">
-        <h2>Upload Image</h2>
-
-        <!-- FastAPI processes multipart/form-data POSTs at the same "/" route -->
-        <form id="upload-form" method="POST" action="http://localhost:5000/api/predict" enctype="multipart/form-data">
-            <div class="drop-zone">
-                <div class="icon">🖼️</div>
-                <p>Drag &amp; drop or <strong>choose a file</strong></p>
-                <input id="file-input" type="file" name="file" accept="image/*" required>
-            </div>
-            <button id="submit-btn" type="submit" class="btn">▶ Analyze &amp; Predict</button>
-        </form>
-
-        <div id="error-box" class="alert alert-error is-hidden"></div>
-
-        <div id="fallback-box" class="alert alert-warn is-hidden">
-            ⚠️ <b>Warning:</b> No sign region detected via color masking.<br>
-            Using the <b>full image</b> as a fallback — accuracy may be lower.
-            Try cropping the image closer to the sign.
+<section class="upload-center card">
+    <div class="upload-title">Upload image</div>
+    <form id="upload-form" method="POST" action="http://localhost:5000/api/predict" enctype="multipart/form-data">
+        <div class="drop-zone">
+            <p>Drag and drop or <strong>choose a file</strong></p>
+            <input id="file-input" type="file" name="file" accept="image/*" required>
         </div>
-        <div style="margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px;">
-            <div class="section-label">Classification Results</div>
-            <div id="classification-results">
-                <div style="margin-bottom: 12px;">
-                    <div style="font-size: 11px; color: var(--muted); font-family: var(--mono);">ROI 1</div>
-                    <div style="font-size: 22px; font-weight: 700;" class="placeholder-text">Awaiting upload</div>
-                    <div style="font-size: 12px; color: var(--muted);">Confidence: <b style="color: var(--muted)">--</b></div>
+        <button id="submit-btn" type="submit" class="btn">Analyze and predict</button>
+    </form>
+    <div id="error-box" class="alert alert-error is-hidden"></div>
+    <div id="fallback-box" class="alert alert-warn is-hidden">
+        Warning: No sign region detected via color masking. Using the full image as fallback.
+    </div>
+</section>
+
+<div id="results-sections" class="results is-hidden">
+    <div class="columns">
+        <section class="column column-svm">
+            <div class="column-header">
+                <span class="column-badge">SVM + HOG</span>
+                <div>
+                    <div class="column-title">Classic pipeline</div>
+                    <div class="column-subtitle">Color masks, ROI crop, HOG features, SVM prediction.</div>
                 </div>
             </div>
-        </div>
-    </aside>
 
-    <!-- ── Right content ── -->
-    <main class="right-content">
-        <div id="results-sections" class="is-hidden">
-            <!-- Pipeline overview -->
             <div class="card">
                 <div class="section-label">Pipeline</div>
                 <div class="pipeline-strip">
@@ -298,7 +421,7 @@
                     <span class="pipeline-arrow">→</span>
                     <span class="pipeline-step">Crop ROI</span>
                     <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Resize 64×64</span>
+                    <span class="pipeline-step">Resize 64x64</span>
                     <span class="pipeline-arrow">→</span>
                     <span class="pipeline-step">Grayscale</span>
                     <span class="pipeline-arrow">→</span>
@@ -308,64 +431,114 @@
                 </div>
             </div>
 
-            <!-- Stages 1–4 overview images -->
             <div class="card">
-                <div class="section-label">Stages 1–4 · Sign Region Detection</div>
+                <div class="section-label">Stages 1-4 · Sign region detection</div>
                 <div class="overview-grid">
-
                     <div class="img-card">
                         <div>
                             <div class="step-num">STAGE 1</div>
-                            <div class="step-title">Original Image</div>
+                            <div class="step-title">Original image</div>
                             <div class="step-desc">Input image as uploaded.</div>
                         </div>
-                        <div class="img-frame"><img id="img-original" alt="Original"></div>
+                        <div class="img-frame"><img id="svm-img-original" alt="Original"></div>
                     </div>
-
                     <div class="img-card">
                         <div>
                             <div class="step-num">STAGE 2</div>
-                            <div class="step-title">Color Mask</div>
-                            <div class="step-desc">HSV ranges for red, blue, yellow, orange.</div>
+                            <div class="step-title">Color mask</div>
+                            <div class="step-desc">HSV ranges for sign colors.</div>
                         </div>
-                        <div class="img-frame"><img id="img-raw-mask" alt="Raw mask"></div>
+                        <div class="img-frame"><img id="svm-img-raw-mask" alt="Raw mask"></div>
                     </div>
-
                     <div class="img-card">
                         <div>
                             <div class="step-num">STAGE 3</div>
-                            <div class="step-title">Clean Mask</div>
-                            <div class="step-desc">Open → Close → Dilate.</div>
+                            <div class="step-title">Clean mask</div>
+                            <div class="step-desc">Open, close, and dilate.</div>
                         </div>
-                        <div class="img-frame"><img id="img-clean-mask" alt="Clean mask"></div>
+                        <div class="img-frame"><img id="svm-img-clean-mask" alt="Clean mask"></div>
                     </div>
-
                     <div class="img-card">
                         <div>
                             <div class="step-num">STAGE 4</div>
-                            <div class="step-title">Bounding Boxes</div>
-                            <div class="step-desc">Shape filter + NMS.</div>
+                            <div class="step-title">Bounding boxes</div>
+                            <div class="step-desc">Shape filter and NMS.</div>
                         </div>
-                        <div class="img-frame"><img id="img-boxed" alt="Boxed"></div>
+                        <div class="img-frame"><img id="svm-img-boxed" alt="Boxed"></div>
                     </div>
-
                 </div>
             </div>
 
-            <!-- Per-ROI feature extraction -->
-            <div class="roi-section card">
-                <div class="section-label">Stages 5–9 · Feature Extraction per ROI</div>
-                <div class="roi-list" id="roi-list"></div>
+            <div class="card">
+                <div class="section-label">Predictions</div>
+                <div id="svm-error-box" class="alert alert-error is-hidden"></div>
+                <div id="svm-classification-results" class="classification-list">
+                    <div class="classification-item">
+                        <div class="label placeholder-text">Awaiting upload</div>
+                        <div class="meta">Confidence: --</div>
+                    </div>
+                </div>
             </div>
-        </div>
 
-        <div id="empty-state" class="empty-state">
-            <div class="big-icon">🚦</div>
-            <p>Upload a traffic sign image to get started.<br>
-            Each pipeline stage will be visualized here.</p>
-        </div>
+            <div class="card">
+                <div class="section-label">ROI feature extraction</div>
+                <div class="roi-list" id="svm-roi-list"></div>
+            </div>
+        </section>
 
-    </main>
+        <section class="column column-cnn">
+            <div class="column-header">
+                <span class="column-badge">CNN</span>
+                <div>
+                    <div class="column-title">Deep feature pipeline</div>
+                    <div class="column-subtitle">Crop ROI, normalize, conv feature maps, softmax, Grad-CAM overlay.</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="section-label">Pipeline</div>
+                <div class="pipeline-strip">
+                    <span class="pipeline-step">Upload</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Crop ROI</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Resize 64x64</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Normalize</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Feature maps conv1</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Feature maps conv2</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Feature maps conv3</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Predict (softmax)</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span class="pipeline-step">Grad-CAM heatmap</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="section-label">Predictions</div>
+                <div id="cnn-error-box" class="alert alert-error is-hidden"></div>
+                <div id="cnn-classification-results" class="classification-list">
+                    <div class="classification-item">
+                        <div class="label placeholder-text">Awaiting upload</div>
+                        <div class="meta">Confidence: --</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="section-label">Feature visualization per ROI</div>
+                <div class="roi-list" id="cnn-roi-list"></div>
+            </div>
+        </section>
+    </div>
+</div>
+
+<div id="empty-state" class="empty-state">
+    <p>Upload a traffic sign image to start the side-by-side comparison.</p>
 </div>
 
 <script>
@@ -381,6 +554,7 @@
             const host = hostname || "localhost";
             return `${protocol}//${host}:5000`;
         };
+
         const apiOrigin = resolveApiOrigin();
         const apiUrl = `${apiOrigin}/api/predict`;
         const form = document.getElementById("upload-form");
@@ -395,8 +569,13 @@
         const fallbackBox = document.getElementById("fallback-box");
         const resultsSections = document.getElementById("results-sections");
         const emptyState = document.getElementById("empty-state");
-        const classificationResults = document.getElementById("classification-results");
-        const roiList = document.getElementById("roi-list");
+
+        const svmClassificationResults = document.getElementById("svm-classification-results");
+        const cnnClassificationResults = document.getElementById("cnn-classification-results");
+        const svmRoiList = document.getElementById("svm-roi-list");
+        const cnnRoiList = document.getElementById("cnn-roi-list");
+        const svmErrorBox = document.getElementById("svm-error-box");
+        const cnnErrorBox = document.getElementById("cnn-error-box");
 
         let hasResults = false;
 
@@ -426,65 +605,61 @@
             }
         };
 
-        const renderClassification = (roiResults) => {
-            if (!classificationResults) {
+        const renderClassification = (roiResults, container, accentVar) => {
+            if (!container) {
                 return;
             }
-
             if (!roiResults || roiResults.length === 0) {
-                classificationResults.innerHTML = `
-                    <div style="margin-bottom: 12px;">
-                        <div style="font-size: 11px; color: var(--muted); font-family: var(--mono);">ROI 1</div>
-                        <div style="font-size: 22px; font-weight: 700;" class="placeholder-text">Awaiting upload</div>
-                        <div style="font-size: 12px; color: var(--muted);">Confidence: <b style="color: var(--muted)">--</b></div>
+                container.innerHTML = `
+                    <div class="classification-item">
+                        <div class="label placeholder-text">Awaiting upload</div>
+                        <div class="meta">Confidence: --</div>
                     </div>
                 `;
                 return;
             }
 
-            classificationResults.innerHTML = roiResults.map((r, idx) => {
+            container.innerHTML = roiResults.map((r, idx) => {
                 const label = escapeHtml(r.label ?? "Unknown");
                 const score = (r.score === null || r.score === undefined) ? "--" : `${r.score}%`;
                 return `
-                    <div style="margin-bottom: 12px;">
-                        <div style="font-size: 11px; color: var(--muted); font-family: var(--mono);">ROI ${idx + 1}</div>
-                        <div style="font-size: 22px; font-weight: 700; color: var(--accent);">${label}</div>
-                        <div style="font-size: 12px; color: var(--muted);">Confidence: <b style="color: var(--text)">${escapeHtml(score)}</b></div>
+                    <div class="classification-item" style="--accent-color: var(${accentVar});">
+                        <div class="label">${label}</div>
+                        <div class="meta">ROI ${idx + 1} · Confidence: ${escapeHtml(score)}</div>
                     </div>
                 `;
             }).join("");
         };
 
-        const renderRoiList = (roiResults) => {
-            if (!roiList) {
+        const renderSvmRoiList = (roiResults) => {
+            if (!svmRoiList) {
                 return;
             }
-
             if (!roiResults || roiResults.length === 0) {
-                roiList.innerHTML = `
+                svmRoiList.innerHTML = `
                     <div class="roi-card">
                         <div class="roi-header">
                             <span class="roi-index">ROI - / 0</span>
                             <span class="roi-label placeholder-text">No ROI detected</span>
-                            <span class="roi-score placeholder-score">--</span>
+                            <span class="roi-score">--</span>
                         </div>
                         <div class="roi-body">
-                            <div class="roi-pipeline">
+                            <div class="roi-pipeline svm">
                                 <div class="roi-step">
-                                    <span class="step-label">STAGE 5 · Crop ROI</span>
+                                    <span class="step-label">Crop ROI</span>
                                     <div class="img-frame placeholder-frame">Awaiting input</div>
                                 </div>
                                 <div class="roi-step">
-                                    <span class="step-label">STAGE 6 · Resize 64x64</span>
+                                    <span class="step-label">Resize 64x64</span>
                                     <div class="img-frame placeholder-frame">Awaiting input</div>
                                 </div>
                                 <div class="roi-step">
-                                    <span class="step-label">STAGE 7 · Grayscale</span>
+                                    <span class="step-label">Grayscale</span>
                                     <div class="img-frame placeholder-frame">Awaiting input</div>
                                 </div>
                                 <div class="roi-step">
-                                    <span class="step-label">STAGE 8 · HOG</span>
-                                    <div class="img-frame hog-frame placeholder-frame">Awaiting input</div>
+                                    <span class="step-label">HOG</span>
+                                    <div class="img-frame placeholder-frame">Awaiting input</div>
                                 </div>
                             </div>
                         </div>
@@ -493,7 +668,7 @@
                 return;
             }
 
-            roiList.innerHTML = roiResults.map((r, idx) => {
+            svmRoiList.innerHTML = roiResults.map((r, idx) => {
                 const label = escapeHtml(r.label ?? "Unknown");
                 const score = (r.score === null || r.score === undefined) ? "--" : `${r.score}%`;
                 return `
@@ -504,22 +679,140 @@
                             <span class="roi-score">${escapeHtml(score)}</span>
                         </div>
                         <div class="roi-body">
-                            <div class="roi-pipeline">
+                            <div class="roi-pipeline svm">
                                 <div class="roi-step">
-                                    <span class="step-label">STAGE 5 · Crop ROI</span>
+                                    <span class="step-label">Crop ROI</span>
                                     <div class="img-frame"><img src="${r.crop_b64 || ""}" alt="Crop"></div>
                                 </div>
                                 <div class="roi-step">
-                                    <span class="step-label">STAGE 6 · Resize 64x64</span>
+                                    <span class="step-label">Resize 64x64</span>
                                     <div class="img-frame"><img src="${r.resized_b64 || ""}" alt="Resized"></div>
                                 </div>
                                 <div class="roi-step">
-                                    <span class="step-label">STAGE 7 · Grayscale</span>
+                                    <span class="step-label">Grayscale</span>
                                     <div class="img-frame"><img src="${r.grayscale_b64 || ""}" alt="Gray"></div>
                                 </div>
                                 <div class="roi-step">
-                                    <span class="step-label">STAGE 8 · HOG</span>
-                                    <div class="img-frame hog-frame"><img src="${r.hog_b64 || ""}" alt="HOG"></div>
+                                    <span class="step-label">HOG</span>
+                                    <div class="img-frame"><img src="${r.hog_b64 || ""}" alt="HOG"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+        };
+
+        const renderCnnRoiList = (roiResults) => {
+            if (!cnnRoiList) {
+                return;
+            }
+            if (!roiResults || roiResults.length === 0) {
+                cnnRoiList.innerHTML = `
+                    <div class="roi-card">
+                        <div class="roi-header">
+                            <span class="roi-index">ROI - / 0</span>
+                            <span class="roi-label placeholder-text">No ROI detected</span>
+                            <span class="roi-score">--</span>
+                        </div>
+                        <div class="roi-body">
+                            <div class="roi-pipeline cnn-main">
+                                <div class="roi-step">
+                                    <span class="step-label">Crop ROI</span>
+                                    <div class="img-frame placeholder-frame">Awaiting input</div>
+                                </div>
+                                <div class="roi-step">
+                                    <span class="step-label">Resize 64x64</span>
+                                    <div class="img-frame placeholder-frame">Awaiting input</div>
+                                </div>
+                                <div class="roi-step">
+                                    <span class="step-label">Normalize</span>
+                                    <div class="img-frame placeholder-frame">Awaiting input</div>
+                                </div>
+                            </div>
+                            <div class="feature-grid">
+                                <div class="feature-card">
+                                    <div class="step-label">Feature maps · conv1</div>
+                                    <div class="img-frame placeholder-frame">Awaiting input</div>
+                                </div>
+                                <div class="feature-card">
+                                    <div class="step-label">Feature maps · conv2</div>
+                                    <div class="img-frame placeholder-frame">Awaiting input</div>
+                                </div>
+                                <div class="feature-card">
+                                    <div class="step-label">Feature maps · conv3</div>
+                                    <div class="img-frame placeholder-frame">Awaiting input</div>
+                                </div>
+                            </div>
+                            <div class="roi-pipeline cnn-final">
+                                <div class="roi-step">
+                                    <span class="step-label">Predict (softmax)</span>
+                                    <div class="img-frame placeholder-frame">Awaiting input</div>
+                                </div>
+                                <div class="roi-step">
+                                    <span class="step-label">Grad-CAM heatmap</span>
+                                    <div class="img-frame placeholder-frame">Awaiting input</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            cnnRoiList.innerHTML = roiResults.map((r, idx) => {
+                const label = escapeHtml(r.label ?? "Unknown");
+                const score = (r.score === null || r.score === undefined) ? "--" : `${r.score}%`;
+                const featureMaps = Array.isArray(r.feature_maps) ? r.feature_maps : [];
+                const normalizedSrc = r.normalized_b64 || r.resized_b64 || "";
+                const featureMarkup = featureMaps.length === 0
+                    ? ["conv1", "conv2", "conv3"].map((name) => `
+                        <div class="feature-card">
+                            <div class="step-label">Feature maps · ${name}</div>
+                            <div class="img-frame placeholder-frame">Unavailable</div>
+                        </div>
+                    `).join("")
+                    : featureMaps.map((f) => `
+                        <div class="feature-card">
+                            <div class="step-label">Feature maps · ${escapeHtml(f.name || "conv")}</div>
+                            <div class="img-frame"><img src="${f.grid_b64 || ""}" alt="Feature map"></div>
+                        </div>
+                    `).join("");
+
+                return `
+                    <div class="roi-card">
+                        <div class="roi-header">
+                            <span class="roi-index">ROI ${idx + 1} / ${roiResults.length}</span>
+                            <span class="roi-label">${label}</span>
+                            <span class="roi-score">${escapeHtml(score)}</span>
+                        </div>
+                        <div class="roi-body">
+                            <div class="roi-pipeline cnn-main">
+                                <div class="roi-step">
+                                    <span class="step-label">Crop ROI</span>
+                                    <div class="img-frame"><img src="${r.crop_b64 || ""}" alt="Crop"></div>
+                                </div>
+                                <div class="roi-step">
+                                    <span class="step-label">Resize 64x64</span>
+                                    <div class="img-frame"><img src="${r.resized_b64 || ""}" alt="Resized"></div>
+                                </div>
+                                <div class="roi-step">
+                                    <span class="step-label">Normalize</span>
+                                    <div class="img-frame"><img src="${normalizedSrc}" alt="Normalize"></div>
+                                </div>
+                            </div>
+                            <div class="feature-grid">${featureMarkup}</div>
+                            <div class="roi-pipeline cnn-final">
+                                <div class="roi-step">
+                                    <span class="step-label">Predict (softmax)</span>
+                                    <div class="img-frame predict-frame">
+                                        <div class="predict-label">${label}</div>
+                                        <div>${escapeHtml(score)}</div>
+                                    </div>
+                                </div>
+                                <div class="roi-step">
+                                    <span class="step-label">Grad-CAM heatmap</span>
+                                    <div class="img-frame"><img src="${r.gradcam_b64 || ""}" alt="Grad-CAM"></div>
                                 </div>
                             </div>
                         </div>
@@ -532,10 +825,12 @@
             event.preventDefault();
             setHidden(errorBox, true);
             setHidden(fallbackBox, true);
+            setHidden(svmErrorBox, true);
+            setHidden(cnnErrorBox, true);
 
             if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
                 if (errorBox) {
-                    errorBox.innerHTML = "<b>Error:</b> Please choose an image file.";
+                    errorBox.innerHTML = "Error: Please choose an image file.";
                     setHidden(errorBox, false);
                 }
                 return;
@@ -546,6 +841,7 @@
 
             if (submitBtn) {
                 submitBtn.disabled = true;
+                submitBtn.textContent = "Analyzing...";
             }
 
             try {
@@ -566,7 +862,7 @@
                         ? data.error
                         : `Request failed (${response.status}).`;
                     if (errorBox) {
-                        errorBox.innerHTML = `<b>Error:</b> ${escapeHtml(message)}`;
+                        errorBox.innerHTML = `Error: ${escapeHtml(message)}`;
                         setHidden(errorBox, false);
                     }
                     if (!hasResults) {
@@ -575,20 +871,35 @@
                     return;
                 }
 
-                setImg("img-original", data.original_b64);
-                setImg("img-raw-mask", data.raw_mask_b64);
-                setImg("img-clean-mask", data.clean_mask_b64);
-                setImg("img-boxed", data.boxed_b64);
+                const svm = data.svm || {};
+                const cnn = data.cnn || {};
 
-                renderClassification(data.roi_results || []);
-                renderRoiList(data.roi_results || []);
+                if (svm.error && svmErrorBox) {
+                    svmErrorBox.innerHTML = `Error: ${escapeHtml(svm.error)}`;
+                    setHidden(svmErrorBox, false);
+                }
+                if (cnn.error && cnnErrorBox) {
+                    cnnErrorBox.innerHTML = `Error: ${escapeHtml(cnn.error)}`;
+                    setHidden(cnnErrorBox, false);
+                }
 
-                setHidden(fallbackBox, !data.fallback);
+                setImg("svm-img-original", svm.original_b64);
+                setImg("svm-img-raw-mask", svm.raw_mask_b64);
+                setImg("svm-img-clean-mask", svm.clean_mask_b64);
+                setImg("svm-img-boxed", svm.boxed_b64);
+
+                renderClassification(svm.roi_results || [], svmClassificationResults, "--accent-svm");
+                renderSvmRoiList(svm.roi_results || []);
+
+                renderClassification(cnn.roi_results || [], cnnClassificationResults, "--accent-cnn");
+                renderCnnRoiList(cnn.roi_results || []);
+
+                setHidden(fallbackBox, !svm.fallback);
                 setResultsVisible(true);
                 hasResults = true;
             } catch (err) {
                 if (errorBox) {
-                    errorBox.innerHTML = "<b>Error:</b> Could not reach the backend.";
+                    errorBox.innerHTML = "Error: Could not reach the backend.";
                     setHidden(errorBox, false);
                 }
                 if (!hasResults) {
@@ -597,6 +908,7 @@
             } finally {
                 if (submitBtn) {
                     submitBtn.disabled = false;
+                    submitBtn.textContent = "Analyze and predict";
                 }
             }
         });

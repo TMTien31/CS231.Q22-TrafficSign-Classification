@@ -18,6 +18,12 @@ if str(ROOT_DIR) not in sys.path:
 import cv2
 import joblib
 import numpy as np
+try:
+    import tensorflow as tf
+    from tensorflow import keras
+except Exception:
+    tf = None
+    keras = None
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -26,6 +32,13 @@ from fastapi.templating import Jinja2Templates
 
 from svm.config import CLASSES, IMG_SIZE, MODEL_CANDIDATES
 from svm.svm_features_extraction.hog import extract_hog, resize_and_gray
+
+CNN_MODEL_CANDIDATES = [
+    ROOT_DIR / "cnn" / "models" / "cnn_model_final.keras",
+]
+CNN_IMG_SIZE = 64
+CNN_MAX_FEATURES = 12
+CNN_FEATURE_COLS = 4
 
 
 # ---------------------------------------------------------------------------
@@ -51,14 +64,28 @@ def _ensure_numpy_compat() -> None:
 # Model loader
 # ---------------------------------------------------------------------------
 
-def _load_model():
+def _load_svm_model():
     _ensure_numpy_compat()
     for path in MODEL_CANDIDATES:
         if Path(path).exists():
-            print(f"[model] Loaded from: {path}")
+            print(f"[svm] Loaded from: {path}")
             return joblib.load(path), path
-    print("[model] WARNING: No model file found. Place a model in svm/models/ or svm/svm_models/.")
+    print("[svm] WARNING: No model file found. Place a model in svm/models/ or svm/svm_models/.")
     return None, None
+
+
+def _load_cnn_model():
+    if keras is None:
+        return None, None, "TensorFlow is not available."
+    for path in CNN_MODEL_CANDIDATES:
+        if Path(path).exists():
+            try:
+                model = keras.models.load_model(path)
+            except Exception as exc:
+                return None, path, f"Failed to load CNN model: {exc}"
+            print(f"[cnn] Loaded from: {path}")
+            return model, path, None
+    return None, None, "CNN model not found. Place cnn_model_final.keras in cnn/models/."
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +135,89 @@ def _decode_image_bytes(raw_bytes: bytes) -> np.ndarray | None:
         return None
     buf = np.frombuffer(raw_bytes, dtype=np.uint8)
     return cv2.imdecode(buf, cv2.IMREAD_COLOR)
+
+
+def _unique_preserve_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def _select_conv_layer_names(model: Any, max_layers: int = 3) -> list[str]:
+    if tf is None:
+        return []
+    conv_types = (tf.keras.layers.Conv2D, tf.keras.layers.DepthwiseConv2D)
+    candidates: list[str] = []
+    for layer in model.submodules:
+        if isinstance(layer, conv_types):
+            candidates.append(layer.name)
+
+    candidates = _unique_preserve_order(candidates)
+    preferred = [name for name in ("conv1", "conv2", "conv3") if name in candidates]
+    if preferred:
+        return preferred
+    return candidates[-max_layers:]
+
+
+def _feature_map_grid(feature_map: np.ndarray) -> np.ndarray:
+    num_channels = feature_map.shape[-1]
+    max_channels = min(num_channels, CNN_MAX_FEATURES)
+    cols = CNN_FEATURE_COLS
+    rows = int(math.ceil(max_channels / cols))
+
+    height, width = feature_map.shape[:2]
+    grid = np.zeros((rows * height, cols * width), dtype=np.uint8)
+
+    for i in range(max_channels):
+        fmap = feature_map[:, :, i]
+        fmap_norm = cv2.normalize(fmap, None, 0, 255, cv2.NORM_MINMAX)
+        fmap_norm = fmap_norm.astype(np.uint8)
+        row = i // cols
+        col = i % cols
+        y0 = row * height
+        x0 = col * width
+        grid[y0:y0 + height, x0:x0 + width] = fmap_norm
+
+    return cv2.cvtColor(grid, cv2.COLOR_GRAY2BGR)
+
+
+def _make_gradcam_heatmap(
+    img_array: np.ndarray,
+    model: Any,
+    last_conv_layer_name: str,
+    pred_index: int | None = None,
+) -> tuple[np.ndarray, int]:
+    if tf is None or keras is None:
+        raise RuntimeError("TensorFlow is not available.")
+
+    grad_model = keras.Model(
+        [model.inputs],
+        [model.get_layer(last_conv_layer_name).output, model.output],
+    )
+    with tf.GradientTape() as tape:
+        conv_outputs, predictions = grad_model(img_array)
+        if pred_index is None:
+            pred_index = int(tf.argmax(predictions[0]))
+        class_channel = predictions[:, pred_index]
+
+    grads = tape.gradient(class_channel, conv_outputs)
+    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+    conv_outputs = conv_outputs[0]
+    heatmap = tf.reduce_sum(tf.multiply(pooled_grads, conv_outputs), axis=-1)
+    heatmap = tf.maximum(heatmap, 0) / (tf.reduce_max(heatmap) + 1e-8)
+    return heatmap.numpy(), pred_index
+
+
+def _overlay_heatmap(image_bgr: np.ndarray, heatmap: np.ndarray) -> np.ndarray:
+    heatmap_resized = cv2.resize(heatmap, (image_bgr.shape[1], image_bgr.shape[0]))
+    heatmap_uint8 = np.uint8(255 * heatmap_resized)
+    heatmap_color = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
+    return cv2.addWeighted(image_bgr, 0.6, heatmap_color, 0.4, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -419,18 +529,24 @@ def draw_predictions(
 # Top-level inference entry point
 # ---------------------------------------------------------------------------
 
-def run_inference(image_bgr: np.ndarray, model: Any) -> dict[str, Any]:
-    """
-    Full 9-stage pipeline:
-      Stage 2-5 : detect_sign_rois  (color mask -> contour -> NMS -> crop)
-      Stage 6   : resize to IMG_SIZE
-      Stage 7   : convert to grayscale
-      Stage 8   : extract HOG features
-      Stage 9   : SVM prediction
-
-    Returns a context dict suitable for passing directly to the Jinja2 template.
-    """
-    rois_with_boxes, raw_mask_b64, clean_mask_b64, fallback = detect_sign_rois(image_bgr)
+def run_svm_inference(
+    image_bgr: np.ndarray,
+    rois_with_boxes: list[tuple[np.ndarray, tuple[int, int, int, int]]],
+    model: Any | None,
+    raw_mask_b64: str,
+    clean_mask_b64: str,
+    fallback: bool,
+) -> dict[str, Any]:
+    if model is None:
+        return {
+            "error": "SVM model is not loaded.",
+            "original_b64": _encode_bgr_to_base64(image_bgr),
+            "raw_mask_b64": raw_mask_b64,
+            "clean_mask_b64": clean_mask_b64,
+            "boxed_b64": "",
+            "roi_results": [],
+            "fallback": fallback,
+        }
 
     roi_results: list[dict[str, Any]] = []
 
@@ -441,27 +557,139 @@ def run_inference(image_bgr: np.ndarray, model: Any) -> dict[str, Any]:
 
         roi_results.append(
             {
-                "bbox":         bbox,
-                "label":        label,
-                "score":        score,
-                "crop_b64":     _encode_bgr_to_base64(roi_crop),
-                "resized_b64":  _encode_bgr_to_base64(img_resized),
+                "bbox": bbox,
+                "label": label,
+                "score": score,
+                "crop_b64": _encode_bgr_to_base64(roi_crop),
+                "resized_b64": _encode_bgr_to_base64(img_resized),
                 "grayscale_b64": _encode_bgr_to_base64(
                     cv2.cvtColor(img_gray, cv2.COLOR_GRAY2BGR)
                 ),
-                "hog_b64":      _encode_bgr_to_base64(hog_vis),
+                "hog_b64": _encode_bgr_to_base64(hog_vis),
             }
         )
 
     boxed_img = draw_predictions(image_bgr, roi_results)
 
     return {
-        "original_b64":   _encode_bgr_to_base64(image_bgr),
-        "raw_mask_b64":   raw_mask_b64,
+        "original_b64": _encode_bgr_to_base64(image_bgr),
+        "raw_mask_b64": raw_mask_b64,
         "clean_mask_b64": clean_mask_b64,
-        "boxed_b64":      _encode_bgr_to_base64(boxed_img),
-        "roi_results":    roi_results,
-        "fallback":       fallback,
+        "boxed_b64": _encode_bgr_to_base64(boxed_img),
+        "roi_results": roi_results,
+        "fallback": fallback,
+    }
+
+
+def run_cnn_inference(
+    rois_with_boxes: list[tuple[np.ndarray, tuple[int, int, int, int]]],
+    model: Any | None,
+    feature_extractor: Any | None,
+    feature_layer_names: list[str],
+    last_conv_layer_name: str | None,
+    error_message: str | None,
+) -> dict[str, Any]:
+    if model is None:
+        return {
+            "error": error_message or "CNN model is not loaded.",
+            "roi_results": [],
+            "feature_layers": feature_layer_names,
+        }
+
+    roi_results: list[dict[str, Any]] = []
+
+    for roi_crop, _bbox in rois_with_boxes:
+        resized_bgr = cv2.resize(roi_crop, (CNN_IMG_SIZE, CNN_IMG_SIZE))
+        resized_rgb = cv2.cvtColor(resized_bgr, cv2.COLOR_BGR2RGB)
+        normalized = resized_rgb.astype("float32") / 255.0
+        normalized_bgr = cv2.cvtColor(
+            (normalized * 255.0).astype("uint8"),
+            cv2.COLOR_RGB2BGR,
+        )
+        batch = np.expand_dims(resized_rgb.astype("float32"), axis=0)
+
+        probs = model.predict(batch, verbose=0)[0]
+        pred_idx = int(np.argmax(probs))
+        label = CLASSES[pred_idx]
+        score = round(float(probs[pred_idx]) * 100, 2)
+
+        feature_maps: list[dict[str, str]] = []
+        if feature_extractor is not None and feature_layer_names:
+            try:
+                feature_outputs = feature_extractor.predict(batch, verbose=0)
+                if not isinstance(feature_outputs, list):
+                    feature_outputs = [feature_outputs]
+                for fmap, layer_name in zip(feature_outputs, feature_layer_names):
+                    grid_bgr = _feature_map_grid(fmap[0])
+                    feature_maps.append(
+                        {
+                            "name": layer_name,
+                            "grid_b64": _encode_bgr_to_base64(grid_bgr),
+                        }
+                    )
+            except Exception:
+                feature_maps = []
+
+        gradcam_b64 = ""
+        if last_conv_layer_name:
+            try:
+                heatmap, _ = _make_gradcam_heatmap(
+                    batch, model, last_conv_layer_name, pred_index=pred_idx
+                )
+                overlay_bgr = _overlay_heatmap(roi_crop, heatmap)
+                gradcam_b64 = _encode_bgr_to_base64(overlay_bgr)
+            except Exception:
+                gradcam_b64 = ""
+
+        roi_results.append(
+            {
+                "label": label,
+                "score": score,
+                "crop_b64": _encode_bgr_to_base64(roi_crop),
+                "resized_b64": _encode_bgr_to_base64(resized_bgr),
+                "normalized_b64": _encode_bgr_to_base64(normalized_bgr),
+                "feature_maps": feature_maps,
+                "gradcam_b64": gradcam_b64,
+            }
+        )
+
+    return {
+        "roi_results": roi_results,
+        "feature_layers": feature_layer_names,
+    }
+
+
+def run_inference(
+    image_bgr: np.ndarray,
+    svm_model: Any | None,
+    cnn_model: Any | None,
+    cnn_feature_extractor: Any | None,
+    cnn_feature_layers: list[str],
+    cnn_last_conv: str | None,
+    cnn_error: str | None,
+) -> dict[str, Any]:
+    rois_with_boxes, raw_mask_b64, clean_mask_b64, fallback = detect_sign_rois(image_bgr)
+
+    cnn_result = run_cnn_inference(
+        rois_with_boxes,
+        cnn_model,
+        cnn_feature_extractor,
+        cnn_feature_layers,
+        cnn_last_conv,
+        cnn_error,
+    )
+    svm_result = run_svm_inference(
+        image_bgr,
+        rois_with_boxes,
+        svm_model,
+        raw_mask_b64,
+        clean_mask_b64,
+        fallback,
+    )
+
+    return {
+        "svm": svm_result,
+        "cnn": cnn_result,
     }
 
 
@@ -476,7 +704,26 @@ def create_app() -> FastAPI:
     upload_dir = static_dir / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    model, _model_path = _load_model()
+    svm_model, _svm_path = _load_svm_model()
+    cnn_model, _cnn_path, cnn_error = _load_cnn_model()
+
+    cnn_feature_layers: list[str] = []
+    cnn_feature_extractor = None
+    cnn_last_conv = None
+    if cnn_model is not None:
+        cnn_feature_layers = _select_conv_layer_names(cnn_model)
+        if cnn_feature_layers:
+            try:
+                cnn_feature_extractor = keras.Model(
+                    inputs=cnn_model.inputs,
+                    outputs=[cnn_model.get_layer(name).output for name in cnn_feature_layers],
+                )
+                cnn_last_conv = cnn_feature_layers[-1]
+            except Exception as exc:
+                cnn_error = f"Failed to prepare CNN feature extractor: {exc}"
+                cnn_feature_layers = []
+                cnn_feature_extractor = None
+                cnn_last_conv = None
 
     app = FastAPI(title="Traffic Sign Classifier", version="1.0.0")
     app.add_middleware(
@@ -514,10 +761,10 @@ def create_app() -> FastAPI:
         save_path = upload_dir / unique_name
         save_path.write_bytes(raw_bytes)
 
-        if model is None:
+        if svm_model is None and cnn_model is None:
             return JSONResponse(
                 {
-                    "error": "Model is not loaded. Please check svm/models/ or svm/svm_models/."
+                    "error": "No model is loaded. Please check svm/models/ and cnn/models/."
                 },
                 status_code=500,
             )
@@ -531,7 +778,15 @@ def create_app() -> FastAPI:
                 status_code=400,
             )
 
-        result = run_inference(img, model)
+        result = run_inference(
+            img,
+            svm_model,
+            cnn_model,
+            cnn_feature_extractor,
+            cnn_feature_layers,
+            cnn_last_conv,
+            cnn_error,
+        )
         return JSONResponse(result)
 
     return app

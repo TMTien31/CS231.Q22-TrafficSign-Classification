@@ -1,0 +1,13 @@
+Test accuracy: 0.9097
+
+              precision    recall  f1-score   support
+
+         Cam     0.9474    1.0000    0.9730        36
+      Chidan     0.8049    0.9167    0.8571        36
+    Hieulenh     0.9231    0.7742    0.8421        31
+    Nguyhiem     1.0000    1.0000    1.0000        29
+         Phu     0.9048    0.8261    0.8636        23
+
+    accuracy                         0.9097       155
+   macro avg     0.9160    0.9034    0.9072       155
+weighted avg     0.9129    0.9097    0.9087       155
