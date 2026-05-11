@@ -117,6 +117,11 @@
             transition: border-color .2s, background .2s;
             cursor: pointer;
             position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 9px;
         }
         .drop-zone:hover { border-color: var(--accent-svm); background: #192233; }
         .drop-zone input[type="file"] {
@@ -134,8 +139,8 @@
             border: none;
             border-radius: 10px;
             font-family: var(--sans);
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 15px;
+            font-weight: 700;
             cursor: pointer;
             transition: transform .15s, filter .2s;
         }
@@ -147,7 +152,7 @@
             padding: 10px 12px;
             border-radius: 8px;
             font-size: 12px;
-            line-height: 1.4;
+            line-height: 1.45;
         }
         .alert-warn  { background: #2b2000; border: 1px solid #5d4a1b; color: #f5b44b; }
         .alert-error { background: #231011; border: 1px solid #5b1e21; color: #ff7f7f; }
@@ -208,7 +213,7 @@
 
         .section-label {
             font-family: var(--mono);
-            font-size: 10px;
+            font-size: 11px;
             letter-spacing: 2px;
             text-transform: uppercase;
             color: var(--muted);
@@ -226,7 +231,7 @@
             color: var(--accent-color);
             white-space: nowrap;
         }
-        .pipeline-arrow { color: var(--border); font-size: 14px; }
+        .pipeline-arrow { color: var(--muted2); font-size: 15px; }
 
         .overview-grid {
             display: grid;
@@ -242,7 +247,8 @@
             padding: 12px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 12px;
+            min-width: 0;
         }
         .img-card .step-num { font-family: var(--mono); font-size: 9px; color: var(--muted); }
         .img-card .step-title { font-size: 12px; font-weight: 600; }
@@ -291,7 +297,9 @@
         .roi-list { display: flex; flex-direction: column; gap: 16px; }
         .roi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
         .roi-header {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 14px;
             align-items: center;
             justify-content: space-between;
             padding: 10px 16px;
@@ -435,7 +443,11 @@
                 <div class="section-label">Stages 1-4 · Sign region detection</div>
                 <div class="overview-grid">
                     <div class="img-card">
-                        <div>
+                        <div class="step-top">
+                            <div>
+                                <div class="step-title">Original Image</div>
+                                <div class="step-desc">Ảnh đầu vào người dùng upload.</div>
+                            </div>
                             <div class="step-num">STAGE 1</div>
                             <div class="step-title">Original image</div>
                             <div class="step-desc">Input image as uploaded.</div>
@@ -564,6 +576,7 @@
         form.action = apiUrl;
 
         const fileInput = document.getElementById("file-input");
+        const fileName = document.getElementById("file-name");
         const submitBtn = document.getElementById("submit-btn");
         const errorBox = document.getElementById("error-box");
         const fallbackBox = document.getElementById("fallback-box");
@@ -616,12 +629,13 @@
                         <div class="meta">Confidence: --</div>
                     </div>
                 `;
+                renderMainPrediction([]);
                 return;
             }
 
             container.innerHTML = roiResults.map((r, idx) => {
                 const label = escapeHtml(r.label ?? "Unknown");
-                const score = (r.score === null || r.score === undefined) ? "--" : `${r.score}%`;
+                const score = escapeHtml(formatScore(r.score));
                 return `
                     <div class="classification-item" style="--accent-color: var(${accentVar});">
                         <div class="label">${label}</div>
@@ -629,6 +643,8 @@
                     </div>
                 `;
             }).join("");
+
+            renderMainPrediction(roiResults);
         };
 
         const renderSvmRoiList = (roiResults) => {
@@ -821,6 +837,16 @@
             }).join("");
         };
 
+        if (fileInput) {
+            fileInput.addEventListener("change", () => {
+                if (!fileName) {
+                    return;
+                }
+                const file = fileInput.files && fileInput.files[0];
+                fileName.textContent = file ? `Đã chọn: ${file.name}` : "Chưa chọn ảnh.";
+            });
+        }
+
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
             setHidden(errorBox, true);
@@ -839,8 +865,12 @@
             const formData = new FormData();
             formData.append("file", fileInput.files[0]);
 
+            const useMaskingCheckbox = document.getElementById("use-masking-checkbox");
+            formData.append("use_masking", useMaskingCheckbox && useMaskingCheckbox.checked ? "true" : "false");
+
             if (submitBtn) {
                 submitBtn.disabled = true;
+                submitBtn.textContent = "Analyzing...";
                 submitBtn.textContent = "Analyzing...";
             }
 
@@ -912,6 +942,25 @@
                 }
             }
         });
+
+        const useMaskingCheckbox = document.getElementById("use-masking-checkbox");
+        const maskingPipelineSteps = document.getElementById("masking-pipeline-steps");
+        const maskingImageCards = document.getElementById("masking-image-cards");
+
+        const updateMaskingVisibility = () => {
+            const isMasking = useMaskingCheckbox ? useMaskingCheckbox.checked : true;
+            if (maskingPipelineSteps) {
+                maskingPipelineSteps.classList.toggle("is-hidden", !isMasking);
+            }
+            if (maskingImageCards) {
+                maskingImageCards.classList.toggle("is-hidden", !isMasking);
+            }
+        };
+
+        if (useMaskingCheckbox) {
+            useMaskingCheckbox.addEventListener("change", updateMaskingVisibility);
+            updateMaskingVisibility();
+        }
     })();
 </script>
 
