@@ -1,1 +1,0 @@
-"""SVM assets and utilities."""
