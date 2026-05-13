@@ -222,6 +222,4 @@ static/
 
 cs231-venv/
 Face_Mask_classification-main/
-cnn/
 cache/
-models/HOG_SVM_6x3.joblib
