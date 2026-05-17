@@ -1,53 +1,73 @@
-"""
-Traffic Sign Classifier — FastAPI backend
-"""
+"""HOG model demo backend."""
 
 from __future__ import annotations
 
 import base64
-import math
 import sys
-import uuid
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+from typing import Any
 
 import cv2
 import joblib
 import numpy as np
-try:
-    import tensorflow as tf
-    from tensorflow import keras
-except Exception:
-    tf = None
-    keras = None
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from skimage.feature import hog
+from skimage.transform import resize
 
-from svm.config import CLASSES, IMG_SIZE, MODEL_CANDIDATES
-from svm.svm_features_extraction.hog import extract_hog, resize_and_gray
+ROOT_DIR = Path(__file__).resolve().parents[1]
+MODELS_DIR = ROOT_DIR / "models"
+TEMPLATE_DIR = Path(__file__).resolve().parent
 
-CNN_MODEL_CANDIDATES = [
-    ROOT_DIR / "cnn" / "models" / "cnn_model_final.keras",
-]
-CNN_IMG_SIZE = 64
-CNN_MAX_FEATURES = 12
-CNN_FEATURE_COLS = 4
+MODEL_REGISTRY = {
+    "hog_svm_6x3": {
+        "name": "HOG SVM 6x3",
+        "file": "HOG_SVM_6x3.joblib",
+        "type": "SVM",
+        "tag": "6x3",
+    },
+    "hog_svm_8x2": {
+        "name": "HOG SVM 8x2",
+        "file": "HOG_SVM_8x2.joblib",
+        "type": "SVM",
+        "tag": "8x2",
+    },
+    "hog_rf_6x3": {
+        "name": "HOG Random Forest 6x3",
+        "file": "HOG_RandomForest_6x3.joblib",
+        "type": "Random Forest",
+        "tag": "6x3",
+    },
+    "hog_rf_8x2": {
+        "name": "HOG Random Forest 8x2",
+        "file": "HOG_RandomForest_8x2.joblib",
+        "type": "Random Forest",
+        "tag": "8x2",
+    },
+}
 
 
-# ---------------------------------------------------------------------------
-# NumPy compatibility shim (for models saved with older NumPy)
-# ---------------------------------------------------------------------------
+@dataclass
+class LoadedModel:
+    model_id: str
+    name: str
+    model_type: str
+    tag: str
+    path: Path
+    model: Any
+    label_encoder: Any | None
+    feature_extractor: str
+    hog_params: dict[str, Any]
+    hsv_hist_bins: tuple[int, int, int] | None
+    image_size: tuple[int, int]
+    classes: list[str]
+
 
 def _ensure_numpy_compat() -> None:
-    import numpy as np
-
+    """Allow joblib files saved with older NumPy import paths to load."""
     if hasattr(np, "_core"):
         return
 
@@ -60,796 +80,344 @@ def _ensure_numpy_compat() -> None:
     sys.modules["numpy._core.numeric"] = numpy.core.numeric
 
 
-# ---------------------------------------------------------------------------
-# Model loader
-# ---------------------------------------------------------------------------
-
-def _load_svm_model():
+def _load_models() -> dict[str, LoadedModel]:
     _ensure_numpy_compat()
-    for path in MODEL_CANDIDATES:
-        if Path(path).exists():
-            print(f"[svm] Loaded from: {path}")
-            return joblib.load(path), path
-    print("[svm] WARNING: No model file found. Place a model in svm/models/ or svm/svm_models/.")
-    return None, None
+    loaded: dict[str, LoadedModel] = {}
 
+    for model_id, meta in MODEL_REGISTRY.items():
+        path = MODELS_DIR / meta["file"]
+        if not path.exists():
+            print(f"[models] Missing: models/{meta['file']}")
+            continue
 
-def _load_cnn_model():
-    if keras is None:
-        return None, None, "TensorFlow is not available."
-    for path in CNN_MODEL_CANDIDATES:
-        if Path(path).exists():
+        payload = joblib.load(path)
+        if not isinstance(payload, dict) or "model" not in payload:
+            print(f"[models] Unsupported payload: models/{meta['file']}")
+            continue
+
+        label_encoder = payload.get("label_encoder")
+        classes = payload.get("classes")
+        if classes is None and label_encoder is not None:
+            classes = list(label_encoder.classes_)
+        if classes is None:
+            classes = [str(c) for c in getattr(payload["model"], "classes_", [])]
+
+        model = payload["model"]
+        if hasattr(model, "n_jobs"):
             try:
-                model = keras.models.load_model(path)
-            except Exception as exc:
-                return None, path, f"Failed to load CNN model: {exc}"
-            print(f"[cnn] Loaded from: {path}")
-            return model, path, None
-    return None, None, "CNN model not found. Place cnn_model_final.keras in cnn/models/."
+                model.set_params(n_jobs=1)
+            except Exception:
+                model.n_jobs = 1
+
+        loaded[model_id] = LoadedModel(
+            model_id=model_id,
+            name=str(meta["name"]),
+            model_type=str(meta["type"]),
+            tag=str(meta["tag"]),
+            path=path,
+            model=model,
+            label_encoder=label_encoder,
+            feature_extractor=str(payload.get("feature_extractor", "HOG")),
+            hog_params=dict(payload["hog_params"]),
+            hsv_hist_bins=tuple(payload["hsv_hist_bins"]) if payload.get("hsv_hist_bins") is not None else None,
+            image_size=tuple(payload.get("image_size", (128, 128))),
+            classes=[str(c) for c in classes],
+        )
+        print(f"[models] Loaded {meta['name']} from models/{meta['file']}")
+
+    return loaded
 
 
-# ---------------------------------------------------------------------------
-# HSV color thresholds
-# Red wraps around 0/180 in HSV, so two ranges are required.
-# ---------------------------------------------------------------------------
-RED_LOWER_1 = np.array([0,   70,  50])
-RED_UPPER_1 = np.array([10, 255, 255])
-RED_LOWER_2 = np.array([160, 70,  50])
-RED_UPPER_2 = np.array([180, 255, 255])
-
-BLUE_LOWER   = np.array([85,  60,  60])   # widened slightly for darker blues
-BLUE_UPPER   = np.array([135, 255, 255])
-
-YELLOW_LOWER = np.array([15,  80,  80])
-YELLOW_UPPER = np.array([35,  255, 255])
-
-ORANGE_LOWER = np.array([5,   100, 80])
-ORANGE_UPPER = np.array([20,  255, 255])  # widened upper hue for orange-red
-
-# White mask for signs with white backgrounds (Hiệu lệnh, etc.)
-# High brightness, low saturation
-WHITE_LOWER = np.array([0,   0,   180])
-WHITE_UPPER = np.array([180, 40,  255])
-
-# ---------------------------------------------------------------------------
-# Contour / ROI filter parameters
-# ---------------------------------------------------------------------------
-MIN_AREA_RATIO = 0.003   # contour must cover at least 0.1 % of image area
-MAX_AREA_RATIO = 0.60    # contour must not cover more than 60 % of image area
-MIN_ASPECT     = 0.4     # minimum width / height ratio
-MAX_ASPECT     = 2.5     # maximum width / height ratio
-PADDING_RATIO  = 0.10    # padding added around each cropped ROI
-MAX_ROIS       = 5       # maximum number of ROIs forwarded to the classifier
-NMS_THRESHOLD  = 0.3     # IoU threshold for non-maximum suppression
-
-
-# ---------------------------------------------------------------------------
-# Utility helpers
-# ---------------------------------------------------------------------------
-
-def _encode_bgr_to_base64(image_bgr: np.ndarray) -> str:
-    """JPEG-encode a BGR image and return a data-URI string."""
-    ok, buf = cv2.imencode(".jpg", image_bgr, [cv2.IMWRITE_JPEG_QUALITY, 90])
-    if not ok:
-        return ""
-    return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode("utf-8")
-
-
-def _decode_image_bytes(raw_bytes: bytes) -> Optional[np.ndarray]:
+def _decode_image(raw_bytes: bytes) -> np.ndarray | None:
     if not raw_bytes:
         return None
-    buf = np.frombuffer(raw_bytes, dtype=np.uint8)
-    return cv2.imdecode(buf, cv2.IMREAD_COLOR)
-
-
-def _unique_preserve_order(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        result.append(value)
-    return result
-
-
-def _select_conv_layer_names(model: Any, max_layers: int = 3) -> list[str]:
-    if tf is None:
-        return []
-    conv_types = (tf.keras.layers.Conv2D, tf.keras.layers.DepthwiseConv2D)
-    candidates: list[str] = []
-    for layer in model.submodules:
-        if isinstance(layer, conv_types):
-            candidates.append(layer.name)
-
-    candidates = _unique_preserve_order(candidates)
-    preferred = [name for name in ("conv1", "conv2", "conv3") if name in candidates]
-    if preferred:
-        return preferred
-    return candidates[-max_layers:]
-
-
-def _feature_map_grid(feature_map: np.ndarray) -> np.ndarray:
-    num_channels = feature_map.shape[-1]
-    max_channels = min(num_channels, CNN_MAX_FEATURES)
-    cols = CNN_FEATURE_COLS
-    rows = int(math.ceil(max_channels / cols))
-
-    height, width = feature_map.shape[:2]
-    grid = np.zeros((rows * height, cols * width), dtype=np.uint8)
-
-    for i in range(max_channels):
-        fmap = feature_map[:, :, i]
-        fmap_norm = cv2.normalize(fmap, None, 0, 255, cv2.NORM_MINMAX)
-        fmap_norm = fmap_norm.astype(np.uint8)
-        row = i // cols
-        col = i % cols
-        y0 = row * height
-        x0 = col * width
-        grid[y0:y0 + height, x0:x0 + width] = fmap_norm
-
-    return cv2.cvtColor(grid, cv2.COLOR_GRAY2BGR)
-
-
-def _make_gradcam_heatmap(
-    img_array: np.ndarray,
-    model: Any,
-    last_conv_layer_name: str,
-    pred_index: int | None = None,
-) -> tuple[np.ndarray, int]:
-    if tf is None or keras is None:
-        raise RuntimeError("TensorFlow is not available.")
-
-    grad_model = keras.Model(
-        [model.inputs],
-        [model.get_layer(last_conv_layer_name).output, model.output],
-    )
-    with tf.GradientTape() as tape:
-        conv_outputs, predictions = grad_model(img_array)
-        if pred_index is None:
-            pred_index = int(tf.argmax(predictions[0]))
-        class_channel = predictions[:, pred_index]
-
-    grads = tape.gradient(class_channel, conv_outputs)
-    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
-    conv_outputs = conv_outputs[0]
-    heatmap = tf.reduce_sum(tf.multiply(pooled_grads, conv_outputs), axis=-1)
-    heatmap = tf.maximum(heatmap, 0) / (tf.reduce_max(heatmap) + 1e-8)
-    return heatmap.numpy(), pred_index
-
-
-def _overlay_heatmap(image_bgr: np.ndarray, heatmap: np.ndarray) -> np.ndarray:
-    heatmap_resized = cv2.resize(heatmap, (image_bgr.shape[1], image_bgr.shape[0]))
-    heatmap_uint8 = np.uint8(255 * heatmap_resized)
-    heatmap_color = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
-    return cv2.addWeighted(image_bgr, 0.6, heatmap_color, 0.4, 0)
-
-
-# ---------------------------------------------------------------------------
-# Stage 2 - Color masking
-# ---------------------------------------------------------------------------
-
-def create_color_mask(image_bgr: np.ndarray) -> np.ndarray:
-    """
-    Build a binary mask that highlights pixels whose color falls within the
-    HSV ranges associated with traffic signs (red, blue, yellow, orange).
-    """
-    hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
-
-    mask_red = cv2.bitwise_or(
-        cv2.inRange(hsv, RED_LOWER_1, RED_UPPER_1),
-        cv2.inRange(hsv, RED_LOWER_2, RED_UPPER_2),
-    )
-    mask_blue   = cv2.inRange(hsv, BLUE_LOWER,   BLUE_UPPER)
-    mask_yellow = cv2.inRange(hsv, YELLOW_LOWER, YELLOW_UPPER)
-    mask_orange = cv2.inRange(hsv, ORANGE_LOWER, ORANGE_UPPER)
-    mask_white  = cv2.inRange(hsv, WHITE_LOWER,  WHITE_UPPER)
-
-    combined = cv2.bitwise_or(mask_red,  mask_blue)
-    combined = cv2.bitwise_or(combined,  mask_yellow)
-    combined = cv2.bitwise_or(combined,  mask_orange)
-    combined = cv2.bitwise_or(combined,  mask_white)
-    return combined
-
-
-# ---------------------------------------------------------------------------
-# Stage 3 - Mask cleaning (morphological operations)
-# ---------------------------------------------------------------------------
-
-def clean_mask(mask: np.ndarray) -> np.ndarray:
-    """
-    Remove noise and fill gaps in the binary mask using:
-      Gaussian blur -> threshold -> morphological open -> close -> dilate
-    """
-    blurred = cv2.GaussianBlur(mask, (5, 5), 0)
-    _, blurred = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
-
-    kernel_open   = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    kernel_close  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
-    kernel_dilate = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-
-    opened  = cv2.morphologyEx(blurred, cv2.MORPH_OPEN,  kernel_open)
-    closed  = cv2.morphologyEx(opened,  cv2.MORPH_CLOSE, kernel_close)
-    dilated = cv2.dilate(closed, kernel_dilate, iterations=2)
-    return dilated
-
-
-# ---------------------------------------------------------------------------
-# Stage 4a - Contour detection
-# ---------------------------------------------------------------------------
-
-def find_candidate_contours(mask: np.ndarray) -> list[np.ndarray]:
-    """Return external contours found in the cleaned mask."""
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    return list(contours)
-
-
-# ---------------------------------------------------------------------------
-# Stage 4b - Shape-based contour filtering
-# ---------------------------------------------------------------------------
-
-def filter_contours_by_shape(
-    contours: list[np.ndarray],
-    image_shape: tuple[int, ...],
-) -> list[tuple[int, int, int, int]]:
-    """
-    Keep contours that pass area, aspect ratio, and geometric shape tests.
-    Accepted shapes: circle, triangle, rectangle, and convex polygons.
-    Returns bounding boxes sorted by area (largest first).
-    """
-    img_h, img_w = image_shape[:2]
-    img_area = img_h * img_w
-    min_area = img_area * MIN_AREA_RATIO
-    max_area = img_area * MAX_AREA_RATIO
-
-    valid: list[tuple[int, int, int, int, float]] = []
-
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if not (min_area <= area <= max_area):
-            continue
-
-        x, y, w, h = cv2.boundingRect(cnt)
-        if h <= 0:
-            continue
-
-        aspect_ratio = float(w) / h
-        if not (MIN_ASPECT <= aspect_ratio <= MAX_ASPECT):
-            continue
-
-        perimeter = cv2.arcLength(cnt, True)
-        if perimeter <= 0:
-            continue
-
-        circularity = (4 * math.pi * area) / (perimeter ** 2)
-        epsilon     = 0.04 * perimeter
-        approx      = cv2.approxPolyDP(cnt, epsilon, True)
-        n_vertices  = len(approx)
-
-        is_circle  = circularity > 0.6
-        is_triangle = n_vertices == 3
-        is_rect    = n_vertices == 4
-        is_polygon = n_vertices >= 5 and circularity > 0.4
-
-        if is_circle or is_triangle or is_rect or is_polygon:
-            valid.append((x, y, w, h, area))
-
-    valid.sort(key=lambda b: b[4], reverse=True)
-    return [(x, y, w, h) for x, y, w, h, _ in valid]
-
-
-# ---------------------------------------------------------------------------
-# Non-maximum suppression
-# ---------------------------------------------------------------------------
-
-def _iou(
-    box1: tuple[int, int, int, int],
-    box2: tuple[int, int, int, int],
-) -> float:
-    """Intersection-over-Union for two (x, y, w, h) bounding boxes."""
-    x1, y1, w1, h1 = box1
-    x2, y2, w2, h2 = box2
-    ix = max(x1, x2)
-    iy = max(y1, y2)
-    iw = min(x1 + w1, x2 + w2) - ix
-    ih = min(y1 + h1, y2 + h2) - iy
-    if iw <= 0 or ih <= 0:
-        return 0.0
-    inter = iw * ih
-    union = w1 * h1 + w2 * h2 - inter
-    return inter / union if union > 0 else 0.0
-
-
-def apply_nms(
-    boxes: list[tuple[int, int, int, int]],
-) -> list[tuple[int, int, int, int]]:
-    """
-    Greedy NMS: suppress boxes that overlap more than NMS_THRESHOLD with
-    an already-kept box. Returns at most MAX_ROIS boxes.
-    """
-    suppressed = [False] * len(boxes)
-    kept: list[tuple[int, int, int, int]] = []
-
-    for i, box_i in enumerate(boxes):
-        if suppressed[i]:
-            continue
-        kept.append(box_i)
-        for j in range(i + 1, len(boxes)):
-            if not suppressed[j] and _iou(box_i, boxes[j]) > NMS_THRESHOLD:
-                suppressed[j] = True
-
-    return kept[:MAX_ROIS]
-
-
-# ---------------------------------------------------------------------------
-# Stage 5 - ROI cropping
-# ---------------------------------------------------------------------------
-
-def _center_crop(image_bgr: np.ndarray, ratio: float = 0.65) -> np.ndarray:
-    """
-    Crop the center region of the image (default 65% of each dimension).
-    Useful as a smarter fallback when color masking fails — most demo images
-    have the sign near the center.
-    """
-    h, w = image_bgr.shape[:2]
-    cx, cy = w // 2, h // 2
-    half_w = int(w * ratio / 2)
-    half_h = int(h * ratio / 2)
-    x0 = max(0, cx - half_w)
-    y0 = max(0, cy - half_h)
-    x1 = min(w, cx + half_w)
-    y1 = min(h, cy + half_h)
-    return image_bgr[y0:y1, x0:x1]
-
-
-def crop_rois(
-    image_bgr: np.ndarray,
-    boxes: list[tuple[int, int, int, int]],
-) -> list[tuple[np.ndarray, tuple[int, int, int, int]]]:
-    """
-    Crop each bounding box from the image with a small padding margin.
-
-    Improvements over the original:
-    - Boxes are sorted by proximity to image center (nearest first) so that
-      when there are multiple candidates the most likely sign is ranked first.
-    - Square-ify: expand the shorter side to match the longer side before
-      padding, giving the SVM+HOG pipeline a more consistent aspect ratio.
-    Returns (roi_bgr, padded_bbox) pairs; empty crops are skipped.
-    """
-    img_h, img_w = image_bgr.shape[:2]
-    cx_img, cy_img = img_w / 2, img_h / 2
-
-    # Sort boxes by distance from image center (ascending)
-    def _dist_to_center(box: tuple[int, int, int, int]) -> float:
-        x, y, w, h = box
-        return ((x + w / 2 - cx_img) ** 2 + (y + h / 2 - cy_img) ** 2) ** 0.5
-
-    boxes_sorted = sorted(boxes, key=_dist_to_center)
-
-    rois = []
-    for x, y, w, h in boxes_sorted:
-        # Square-ify: make the crop region square around the box center
-        side = max(w, h)
-        cx = x + w // 2
-        cy = y + h // 2
-        half = side // 2 + 1
-
-        pad = int(side * PADDING_RATIO)
-        x0 = max(0, cx - half - pad)
-        y0 = max(0, cy - half - pad)
-        x1 = min(img_w, cx + half + pad)
-        y1 = min(img_h, cy + half + pad)
-
-        roi = image_bgr[y0:y1, x0:x1]
-        if roi.size == 0:
-            continue
-        rois.append((roi, (x0, y0, x1 - x0, y1 - y0)))
-
-    return rois
-
-
-# ---------------------------------------------------------------------------
-# Orchestrator: stages 2-5
-# ---------------------------------------------------------------------------
-
-def detect_sign_rois(
-    image_bgr: np.ndarray,
-) -> tuple[
-    list[tuple[np.ndarray, tuple[int, int, int, int]]],
-    str,
-    str,
-    bool,
-]:
-    """
-    Run color masking -> clean -> contour filter -> NMS -> crop ROIs.
-
-    Returns:
-        rois_with_boxes  : list of (roi_bgr, bbox) pairs
-        raw_mask_b64     : base64 data-URI of the raw HSV mask
-        clean_mask_b64   : base64 data-URI of the cleaned mask
-        fallback         : True when no ROI was found (full image used instead)
-    """
-    raw_mask  = create_color_mask(image_bgr)
-    clean     = clean_mask(raw_mask)
-
-    raw_mask_b64   = _encode_bgr_to_base64(cv2.cvtColor(raw_mask, cv2.COLOR_GRAY2BGR))
-    clean_mask_b64 = _encode_bgr_to_base64(cv2.cvtColor(clean,    cv2.COLOR_GRAY2BGR))
-
-    contours = find_candidate_contours(clean)
-    boxes    = filter_contours_by_shape(contours, image_bgr.shape)
-    boxes    = apply_nms(boxes)
-
-    fallback = False
-    if not boxes:
-        fallback = True
-        # Smarter fallback: use the center 65% of the image instead of the
-        # full frame, since demo images typically have the sign centered.
-        h, w = image_bgr.shape[:2]
-        margin_x = int(w * 0.175)
-        margin_y = int(h * 0.175)
-        boxes = [(margin_x, margin_y, w - 2 * margin_x, h - 2 * margin_y)]
-
-    rois_with_boxes = crop_rois(image_bgr, boxes)
-    return rois_with_boxes, raw_mask_b64, clean_mask_b64, fallback
-
-
-# ---------------------------------------------------------------------------
-# Stage 9 - SVM prediction
-# ---------------------------------------------------------------------------
-
-def predict_label(feature: np.ndarray, model: Any) -> Tuple[str, Optional[float]]:
-    """
-    Run the SVM on a single HOG feature vector.
-
-    Returns:
-        label : predicted class name
-        score : confidence as a percentage (predict_proba) or decision score,
-                or None if unavailable
-    """
-    feat = feature.reshape(1, -1)
-    raw_pred = model.predict(feat)[0]
-
+    buffer = np.frombuffer(raw_bytes, dtype=np.uint8)
+    return cv2.imdecode(buffer, cv2.IMREAD_COLOR)
+
+
+def _encode_image(image_bgr: np.ndarray, ext: str = ".png") -> str:
+    ok, buffer = cv2.imencode(ext, image_bgr)
+    if not ok:
+        return ""
+    mime = "image/png" if ext == ".png" else "image/jpeg"
+    encoded = base64.b64encode(buffer.tobytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
+def _encode_gray(gray: np.ndarray) -> str:
+    gray_float = gray.astype(np.float32)
+    if gray_float.max() <= 1.0:
+        gray_float = gray_float * 255.0
+    gray_u8 = np.clip(gray_float, 0, 255).astype(np.uint8)
+    return _encode_image(cv2.cvtColor(gray_u8, cv2.COLOR_GRAY2BGR))
+
+
+def _enhance_hog_image(hog_image: np.ndarray) -> np.ndarray:
+    """Create a high-contrast display image from skimage's sparse HOG render."""
+    image = np.asarray(hog_image, dtype=np.float32)
+    image = np.nan_to_num(image, nan=0.0, posinf=0.0, neginf=0.0)
+    image = np.maximum(image, 0.0)
+
+    if float(image.max()) <= float(image.min()):
+        return np.zeros((*image.shape, 3), dtype=np.uint8)
+
+    active = image[image > 0]
+    if active.size == 0:
+        return np.zeros((*image.shape, 3), dtype=np.uint8)
+
+    low = float(np.percentile(active, 5.0))
+    high = float(np.percentile(active, 99.5))
+    if high <= low:
+        low = 0.0
+        high = float(active.max())
+
+    image = np.clip((image - low) / (high - low + 1e-8), 0.0, 1.0)
+    image = np.power(image, 0.32)
+    image_u8 = np.clip(image * 255.0, 0, 255).astype(np.uint8)
+    image_u8 = cv2.dilate(image_u8, np.ones((2, 2), dtype=np.uint8), iterations=1)
+    color = cv2.applyColorMap(image_u8, cv2.COLORMAP_TURBO)
+    canvas = np.full((*image_u8.shape, 3), 246, dtype=np.uint8)
+    mask = image_u8 > 10
+    alpha = (image_u8.astype(np.float32) / 255.0)[..., None]
+    blended = (canvas.astype(np.float32) * (1.0 - alpha) + color.astype(np.float32) * alpha)
+    canvas[mask] = blended[mask].astype(np.uint8)
+    return canvas
+
+
+def _extract_hsv_histogram(
+    image_rgb: np.ndarray,
+    image_size: tuple[int, int],
+    hsv_bins: tuple[int, int, int],
+) -> np.ndarray:
+    height, width = image_size
+    rgb_resized = cv2.resize(image_rgb, (width, height), interpolation=cv2.INTER_AREA)
+    hsv = cv2.cvtColor(rgb_resized, cv2.COLOR_RGB2HSV)
+    h_bins, s_bins, v_bins = hsv_bins
+
+    hist_h = cv2.calcHist([hsv], [0], None, [h_bins], [0, 180]).flatten()
+    hist_s = cv2.calcHist([hsv], [1], None, [s_bins], [0, 256]).flatten()
+    hist_v = cv2.calcHist([hsv], [2], None, [v_bins], [0, 256]).flatten()
+
+    color_feature = np.concatenate([hist_h, hist_s, hist_v]).astype(np.float32)
+    color_feature /= color_feature.sum() + 1e-8
+    return color_feature
+
+
+def _softmax(values: np.ndarray) -> np.ndarray:
+    values = values.astype(np.float64)
+    values = values - np.max(values)
+    exp_values = np.exp(values)
+    total = exp_values.sum()
+    if total == 0:
+        return np.zeros_like(exp_values)
+    return exp_values / total
+
+
+def _label_from_model_class(model_class: Any, loaded_model: LoadedModel) -> str:
+    if loaded_model.label_encoder is not None:
+        try:
+            return str(loaded_model.label_encoder.inverse_transform([int(model_class)])[0])
+        except Exception:
+            pass
     try:
-        label = CLASSES[int(raw_pred)]
-    except (ValueError, IndexError, TypeError):
-        label = str(raw_pred)
+        idx = int(model_class)
+        if 0 <= idx < len(loaded_model.classes):
+            return loaded_model.classes[idx]
+    except Exception:
+        pass
+    return str(model_class)
 
-    score: Optional[float] = None
+
+def _predict_from_feature(feature: np.ndarray, loaded_model: LoadedModel) -> dict[str, Any]:
+    model = loaded_model.model
+    X = feature.reshape(1, -1)
+    raw_pred = model.predict(X)[0]
+    label = _label_from_model_class(raw_pred, loaded_model)
+    class_values = list(getattr(model, "classes_", range(len(loaded_model.classes))))
+
+    top_scores: list[dict[str, Any]] = []
+    confidence: float | None = None
+    score_type = "model score"
 
     if hasattr(model, "predict_proba"):
         try:
-            proba = model.predict_proba(feat)[0]
-            score = round(float(np.max(proba)) * 100, 2)
-        except Exception:
-            pass
-    elif hasattr(model, "decision_function"):
-        try:
-            df = model.decision_function(feat)[0]
-            score = round(float(np.max(df) if isinstance(df, np.ndarray) else df), 3)
-        except Exception:
-            pass
-
-    return label, score
-
-
-# ---------------------------------------------------------------------------
-# Drawing helper
-# ---------------------------------------------------------------------------
-
-_BOX_COLORS = [
-    (0,   200, 0),
-    (0,   120, 255),
-    (255, 60,  0),
-    (200, 0,   200),
-    (0,   200, 200),
-]
-
-
-def draw_predictions(
-    image_bgr: np.ndarray,
-    results: list[dict[str, Any]],
-) -> np.ndarray:
-    """Overlay bounding boxes and predicted labels onto the image."""
-    out = image_bgr.copy()
-
-    for i, result in enumerate(results):
-        x, y, w, h = result["bbox"]
-        color = _BOX_COLORS[i % len(_BOX_COLORS)]
-        cv2.rectangle(out, (x, y), (x + w, y + h), color, 2)
-
-        label_text = result["label"]
-        if result["score"] is not None:
-            label_text += f" {result['score']}%"
-
-        (tw, th), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-        ty = max(y - 8, th + 4)
-        cv2.rectangle(out, (x, ty - th - 4), (x + tw + 4, ty + 2), color, cv2.FILLED)
-        cv2.putText(
-            out, label_text, (x + 2, ty - 2),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2,
-        )
-
-    return out
-
-
-# ---------------------------------------------------------------------------
-# Top-level inference entry point
-# ---------------------------------------------------------------------------
-
-def run_svm_inference(
-    image_bgr: np.ndarray,
-    rois_with_boxes: list[tuple[np.ndarray, tuple[int, int, int, int]]],
-    model: Any | None,
-    raw_mask_b64: str,
-    clean_mask_b64: str,
-    fallback: bool,
-) -> dict[str, Any]:
-    if model is None:
-        return {
-            "error": "SVM model is not loaded.",
-            "original_b64": _encode_bgr_to_base64(image_bgr),
-            "raw_mask_b64": raw_mask_b64,
-            "clean_mask_b64": clean_mask_b64,
-            "boxed_b64": "",
-            "roi_results": [],
-            "fallback": fallback,
-        }
-
-    roi_results: list[dict[str, Any]] = []
-
-    for roi_crop, bbox in rois_with_boxes:
-        img_resized, img_gray = resize_and_gray(roi_crop, IMG_SIZE)
-        feature, hog_vis = extract_hog(img_gray, visualize=True)
-        label, score = predict_label(feature, model)
-
-        roi_results.append(
-            {
-                "bbox": bbox,
-                "label": label,
-                "score": score,
-                "crop_b64": _encode_bgr_to_base64(roi_crop),
-                "resized_b64": _encode_bgr_to_base64(img_resized),
-                "grayscale_b64": _encode_bgr_to_base64(
-                    cv2.cvtColor(img_gray, cv2.COLOR_GRAY2BGR)
-                ),
-                "hog_b64": _encode_bgr_to_base64(hog_vis),
-            }
-        )
-
-    boxed_img = draw_predictions(image_bgr, roi_results)
-
-    return {
-        "original_b64": _encode_bgr_to_base64(image_bgr),
-        "raw_mask_b64": raw_mask_b64,
-        "clean_mask_b64": clean_mask_b64,
-        "boxed_b64": _encode_bgr_to_base64(boxed_img),
-        "roi_results": roi_results,
-        "fallback": fallback,
-    }
-
-
-def run_cnn_inference(
-    rois_with_boxes: list[tuple[np.ndarray, tuple[int, int, int, int]]],
-    model: Any | None,
-    feature_extractor: Any | None,
-    feature_layer_names: list[str],
-    last_conv_layer_name: str | None,
-    error_message: str | None,
-) -> dict[str, Any]:
-    if model is None:
-        return {
-            "error": error_message or "CNN model is not loaded.",
-            "roi_results": [],
-            "feature_layers": feature_layer_names,
-        }
-
-    roi_results: list[dict[str, Any]] = []
-
-    for roi_crop, _bbox in rois_with_boxes:
-        resized_bgr = cv2.resize(roi_crop, (CNN_IMG_SIZE, CNN_IMG_SIZE))
-        resized_rgb = cv2.cvtColor(resized_bgr, cv2.COLOR_BGR2RGB)
-        normalized = resized_rgb.astype("float32") / 255.0
-        normalized_bgr = cv2.cvtColor(
-            (normalized * 255.0).astype("uint8"),
-            cv2.COLOR_RGB2BGR,
-        )
-        batch = np.expand_dims(resized_rgb.astype("float32"), axis=0)
-
-        probs = model.predict(batch, verbose=0)[0]
-        pred_idx = int(np.argmax(probs))
-        label = CLASSES[pred_idx]
-        score = round(float(probs[pred_idx]) * 100, 2)
-
-        feature_maps: list[dict[str, str]] = []
-        if feature_extractor is not None and feature_layer_names:
-            try:
-                feature_outputs = feature_extractor.predict(batch, verbose=0)
-                if not isinstance(feature_outputs, list):
-                    feature_outputs = [feature_outputs]
-                for fmap, layer_name in zip(feature_outputs, feature_layer_names):
-                    grid_bgr = _feature_map_grid(fmap[0])
-                    feature_maps.append(
-                        {
-                            "name": layer_name,
-                            "grid_b64": _encode_bgr_to_base64(grid_bgr),
-                        }
-                    )
-            except Exception:
-                feature_maps = []
-
-        gradcam_b64 = ""
-        if last_conv_layer_name:
-            try:
-                heatmap, _ = _make_gradcam_heatmap(
-                    batch, model, last_conv_layer_name, pred_index=pred_idx
+            probabilities = model.predict_proba(X)[0]
+            order = np.argsort(probabilities)[::-1]
+            confidence = round(float(probabilities[order[0]]) * 100, 2)
+            score_type = "probability"
+            for idx in order[:5]:
+                top_scores.append(
+                    {
+                        "label": _label_from_model_class(class_values[idx], loaded_model),
+                        "score": round(float(probabilities[idx]) * 100, 2),
+                    }
                 )
-                overlay_bgr = _overlay_heatmap(roi_crop, heatmap)
-                gradcam_b64 = _encode_bgr_to_base64(overlay_bgr)
-            except Exception:
-                gradcam_b64 = ""
+        except Exception:
+            top_scores = []
 
-        roi_results.append(
-            {
-                "label": label,
-                "score": score,
-                "crop_b64": _encode_bgr_to_base64(roi_crop),
-                "resized_b64": _encode_bgr_to_base64(resized_bgr),
-                "normalized_b64": _encode_bgr_to_base64(normalized_bgr),
-                "feature_maps": feature_maps,
-                "gradcam_b64": gradcam_b64,
-            }
-        )
+    if not top_scores and hasattr(model, "decision_function"):
+        try:
+            decision = np.asarray(model.decision_function(X)[0], dtype=np.float64)
+            if decision.ndim == 0:
+                decision = np.array([float(decision)])
+            scaled = _softmax(decision)
+            order = np.argsort(scaled)[::-1]
+            confidence = round(float(scaled[order[0]]) * 100, 2)
+            score_type = "softmax-scaled decision score"
+            for idx in order[:5]:
+                class_value = class_values[idx] if idx < len(class_values) else idx
+                top_scores.append(
+                    {
+                        "label": _label_from_model_class(class_value, loaded_model),
+                        "score": round(float(scaled[idx]) * 100, 2),
+                    }
+                )
+        except Exception:
+            top_scores = []
 
     return {
-        "roi_results": roi_results,
-        "feature_layers": feature_layer_names,
+        "label": label,
+        "confidence": confidence,
+        "score_type": score_type,
+        "top_scores": top_scores,
     }
 
 
-def run_inference(
-    image_bgr: np.ndarray,
-    svm_model: Any | None,
-    cnn_model: Any | None,
-    cnn_feature_extractor: Any | None,
-    cnn_feature_layers: list[str],
-    cnn_last_conv: str | None,
-    cnn_error: str | None,
-) -> dict[str, Any]:
-    rois_with_boxes, raw_mask_b64, clean_mask_b64, fallback = detect_sign_rois(image_bgr)
+def _run_model_pipeline(image_bgr: np.ndarray, loaded_model: LoadedModel) -> dict[str, Any]:
+    image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    gray_u8 = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    gray = gray_u8.astype(np.float32) / 255.0
+    resized = resize(gray, loaded_model.image_size, anti_aliasing=True)
 
-    cnn_result = run_cnn_inference(
-        rois_with_boxes,
-        cnn_model,
-        cnn_feature_extractor,
-        cnn_feature_layers,
-        cnn_last_conv,
-        cnn_error,
-    )
-    svm_result = run_svm_inference(
-        image_bgr,
-        rois_with_boxes,
-        svm_model,
-        raw_mask_b64,
-        clean_mask_b64,
-        fallback,
-    )
+    hog_feature, hog_image = hog(resized, visualize=True, **loaded_model.hog_params)
+    hog_image = _enhance_hog_image(hog_image)
+    feature_parts = [hog_feature.astype(np.float32)]
+    color_feature_length = 0
+
+    if loaded_model.feature_extractor.upper() == "HOG_HSV":
+        if loaded_model.hsv_hist_bins is None:
+            raise ValueError(f"{loaded_model.name} expects HOG_HSV features but hsv_hist_bins is missing.")
+        color_feature = _extract_hsv_histogram(image_rgb, loaded_model.image_size, loaded_model.hsv_hist_bins)
+        color_feature_length = int(color_feature.shape[0])
+        feature_parts.append(color_feature)
+
+    feature = np.concatenate(feature_parts)
+    prediction = _predict_from_feature(feature, loaded_model)
 
     return {
-        "svm": svm_result,
-        "cnn": cnn_result,
+        "model_id": loaded_model.model_id,
+        "name": loaded_model.name,
+        "type": loaded_model.model_type,
+        "tag": loaded_model.tag,
+        "path": str(loaded_model.path.relative_to(ROOT_DIR)),
+        "classes": loaded_model.classes,
+        "image_size": list(loaded_model.image_size),
+        "feature_extractor": loaded_model.feature_extractor,
+        "feature_lengths": {
+            "hog": int(hog_feature.shape[0]),
+            "hsv": color_feature_length,
+            "total": int(feature.shape[0]),
+        },
+        "hog_params": {
+            key: list(value) if isinstance(value, tuple) else value
+            for key, value in loaded_model.hog_params.items()
+        },
+        "hsv_hist_bins": list(loaded_model.hsv_hist_bins) if loaded_model.hsv_hist_bins is not None else None,
+        "steps": {
+            "original": _encode_image(cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)),
+            "grayscale": _encode_gray(gray),
+            "resized": _encode_gray(resized),
+            "hog": _encode_image(hog_image),
+        },
+        "prediction": prediction,
     }
 
 
-# ---------------------------------------------------------------------------
-# App factory
-# ---------------------------------------------------------------------------
+def _model_metadata(loaded_model: LoadedModel) -> dict[str, Any]:
+    return {
+        "id": loaded_model.model_id,
+        "name": loaded_model.name,
+        "type": loaded_model.model_type,
+        "tag": loaded_model.tag,
+        "file": loaded_model.path.name,
+        "classes": loaded_model.classes,
+        "image_size": list(loaded_model.image_size),
+        "feature_extractor": loaded_model.feature_extractor,
+        "hsv_hist_bins": list(loaded_model.hsv_hist_bins) if loaded_model.hsv_hist_bins is not None else None,
+        "hog_params": {
+            key: list(value) if isinstance(value, tuple) else value
+            for key, value in loaded_model.hog_params.items()
+        },
+    }
+
 
 def create_app() -> FastAPI:
-    root_dir = Path(__file__).resolve().parents[1]
-    template_dir = Path(__file__).resolve().parent
-    static_dir = root_dir / "static"
-    upload_dir = static_dir / "uploads"
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    loaded_models = _load_models()
+    templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
-    svm_model, _svm_path = _load_svm_model()
-    cnn_model, _cnn_path, cnn_error = _load_cnn_model()
-
-    cnn_feature_layers: list[str] = []
-    cnn_feature_extractor = None
-    cnn_last_conv = None
-    if cnn_model is not None:
-        cnn_feature_layers = _select_conv_layer_names(cnn_model)
-        if cnn_feature_layers:
-            try:
-                cnn_feature_extractor = keras.Model(
-                    inputs=cnn_model.inputs,
-                    outputs=[cnn_model.get_layer(name).output for name in cnn_feature_layers],
-                )
-                cnn_last_conv = cnn_feature_layers[-1]
-            except Exception as exc:
-                cnn_error = f"Failed to prepare CNN feature extractor: {exc}"
-                cnn_feature_layers = []
-                cnn_feature_extractor = None
-                cnn_last_conv = None
-
-    app = FastAPI(title="Traffic Sign Classifier", version="1.0.0")
+    app = FastAPI(title="HOG Traffic Sign Demo", version="2.0.0")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5500",
-            "http://127.0.0.1:5500",
-            "http://localhost:5000",
-            "http://127.0.0.1:5000",
-        ],
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-    templates = Jinja2Templates(directory=str(template_dir))
 
-    # ------------------------------------------------------------------ GET /
     @app.get("/", response_class=HTMLResponse)
-    async def index_get(request: Request) -> HTMLResponse:
+    async def index(request: Request) -> HTMLResponse:
         return templates.TemplateResponse("index.html", {"request": request})
 
-    # -------------------------------------------------------------- POST /api/predict
+    @app.get("/api/models")
+    async def list_models() -> JSONResponse:
+        return JSONResponse(
+            {
+                "models": [_model_metadata(model) for model in loaded_models.values()],
+            }
+        )
+
     @app.post("/api/predict")
-    async def predict_api(
-        file: Optional[UploadFile] = File(None),
-        use_masking: str = Form("true")
+    async def predict(
+        file: UploadFile = File(...),
+        models: str = Form(...),
     ) -> JSONResponse:
-        if file is None or not file.filename:
-            return JSONResponse({"error": "No file selected."}, status_code=400)
+        requested_ids = [model_id.strip() for model_id in models.split(",") if model_id.strip()]
+        if not requested_ids:
+            return JSONResponse({"error": "No model was selected."}, status_code=400)
 
-        raw_bytes = await file.read()
-        if not raw_bytes:
-            return JSONResponse({"error": "Empty upload."}, status_code=400)
-
-        suffix = Path(file.filename).suffix
-        unique_name = f"{uuid.uuid4().hex}{suffix}"
-        save_path = upload_dir / unique_name
-        save_path.write_bytes(raw_bytes)
-
-        if svm_model is None and cnn_model is None:
+        missing_ids = [model_id for model_id in requested_ids if model_id not in loaded_models]
+        if missing_ids:
             return JSONResponse(
-                {
-                    "error": "No model is loaded. Please check svm/models/ and cnn/models/."
-                },
-                status_code=500,
-            )
-
-        img = _decode_image_bytes(raw_bytes)
-        if img is None:
-            return JSONResponse(
-                {
-                    "error": "Could not decode image file. Please upload a valid image."
-                },
+                {"error": f"Unknown or unavailable model id(s): {', '.join(missing_ids)}"},
                 status_code=400,
             )
 
-        result = run_inference(
-            img,
-            svm_model,
-            cnn_model,
-            cnn_feature_extractor,
-            cnn_feature_layers,
-            cnn_last_conv,
-            cnn_error,
+        raw_bytes = await file.read()
+        image_bgr = _decode_image(raw_bytes)
+        if image_bgr is None:
+            return JSONResponse({"error": "Could not decode the uploaded image."}, status_code=400)
+
+        results = [_run_model_pipeline(image_bgr, loaded_models[model_id]) for model_id in requested_ids]
+        return JSONResponse(
+            {
+                "filename": file.filename,
+                "input": {
+                    "width": int(image_bgr.shape[1]),
+                    "height": int(image_bgr.shape[0]),
+                    "image": _encode_image(image_bgr),
+                },
+                "results": results,
+            }
         )
-        return JSONResponse(result)
 
     return app
 
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
 app = create_app()
+
 
 if __name__ == "__main__":
     import uvicorn
 
     print("Server running at: http://localhost:5000")
-    uvicorn.run("demo.app:app", host="0.0.0.0", port=5000, reload=False)
+    uvicorn.run(app, host="0.0.0.0", port=5000, reload=False)

@@ -3,966 +3,1148 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Traffic Sign Classifier — SVM vs CNN</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <title>HOG Traffic Sign Model Lab</title>
     <style>
         :root {
-            --bg:            #0b0f16;
-            --surface:       #141a26;
-            --surface-2:     #1b2230;
-            --border:        #2a354a;
-            --accent-svm:    #4af0c4;
-            --accent-cnn:    #ff8a5c;
-            --accent-ink:    #131b21;
-            --text:          #e7eef7;
-            --muted:         #7b8ca9;
-            --mono:          "Space Mono", monospace;
-            --sans:          "Plus Jakarta Sans", sans-serif;
+            --bg: #f4f6f8;
+            --panel: #ffffff;
+            --panel-2: #f8fafc;
+            --ink: #151923;
+            --muted: #667085;
+            --line: #d8dee8;
+            --line-strong: #b8c1cf;
+            --blue: #2563eb;
+            --green: #12805c;
+            --orange: #d97706;
+            --red: #c2410c;
+            --dark: #111827;
+            --soft-blue: #e8f0ff;
+            --soft-green: #e7f6ef;
+            --soft-orange: #fff4df;
+            --shadow: 0 14px 38px rgba(15, 23, 42, 0.08);
+            --mono: Consolas, "SFMono-Regular", Menlo, monospace;
+            --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
 
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        * {
+            box-sizing: border-box;
+        }
 
         body {
-            font-family: var(--sans);
-            background: radial-gradient(circle at top left, #121a2a 0%, #0b0f16 48%) fixed;
-            color: var(--text);
+            margin: 0;
             min-height: 100vh;
-            padding: 20px 24px 64px;
-            overflow-x: hidden;
+            background:
+                linear-gradient(180deg, #f9fbff 0, var(--bg) 360px),
+                var(--bg);
+            color: var(--ink);
+            font-family: var(--sans);
         }
 
-        .bg-orb {
-            position: fixed;
-            width: 420px;
-            height: 420px;
-            border-radius: 50%;
-            filter: blur(80px);
-            opacity: 0.4;
-            z-index: -1;
-        }
-        .orb-1 { background: #3a5d8c; top: -120px; left: -80px; }
-        .orb-2 { background: #9a4d3d; bottom: -140px; right: -80px; }
-
-        .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 16px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        button,
+        input,
+        select {
+            font: inherit;
         }
 
-        .header {
-            max-width: 1400px;
-            margin: 0 auto 18px;
-            display: flex;
-            flex-wrap: wrap;
+        button {
+            cursor: pointer;
+        }
+
+        .shell {
+            width: min(1500px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 20px 0 44px;
+        }
+
+        .topbar {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 18px;
             align-items: center;
-            justify-content: space-between;
-            gap: 16px;
+            margin-bottom: 18px;
         }
-        .header-left {
+
+        .brand {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 14px;
+            min-width: 0;
         }
-        .badge {
-            font-family: var(--mono);
-            font-size: 10px;
-            letter-spacing: 2px;
-            padding: 6px 12px;
+
+        .brand-mark {
+            width: 46px;
+            height: 46px;
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            color: #ffffff;
+            background: linear-gradient(135deg, var(--blue), var(--green));
+            font-weight: 800;
+            letter-spacing: 0;
+        }
+
+        .brand h1 {
+            margin: 0;
+            font-size: clamp(22px, 3vw, 34px);
+            letter-spacing: 0;
+        }
+
+        .brand p {
+            margin: 4px 0 0;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .status-pill {
+            justify-self: end;
+            border: 1px solid var(--line);
+            background: var(--panel);
             border-radius: 999px;
-            background: var(--accent-svm);
-            color: #061016;
-            font-weight: 700;
-            text-transform: uppercase;
-        }
-        .header h1 {
-            font-size: clamp(20px, 3vw, 30px);
-            font-weight: 600;
-        }
-        .header p {
-            color: var(--muted);
-            font-size: 13px;
-            margin-top: 4px;
-        }
-        .header-meta {
+            padding: 9px 13px;
             font-family: var(--mono);
-            font-size: 11px;
+            font-size: 12px;
             color: var(--muted);
-            letter-spacing: 1px;
-            text-transform: uppercase;
+            white-space: nowrap;
         }
 
-        .upload-center {
-            max-width: 680px;
-            margin: 0 auto 24px;
-            text-align: center;
-            animation: fadeUp 0.5s ease-out;
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+            gap: 16px;
+            align-items: start;
         }
-        .upload-title {
-            font-family: var(--mono);
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+        }
+
+        .control-panel {
+            position: sticky;
+            top: 16px;
+            padding: 16px;
+        }
+
+        .section-title {
+            margin: 0 0 12px;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
             text-transform: uppercase;
-            font-size: 11px;
-            letter-spacing: 2px;
             color: var(--muted);
-            margin-bottom: 12px;
         }
 
         .drop-zone {
-            border: 2px dashed var(--border);
-            border-radius: 12px;
-            padding: 24px 18px;
-            text-align: center;
-            background: var(--surface-2);
-            transition: border-color .2s, background .2s;
-            cursor: pointer;
             position: relative;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            gap: 9px;
+            min-height: 176px;
+            display: grid;
+            place-items: center;
+            border: 1px dashed var(--line-strong);
+            border-radius: 8px;
+            background: var(--panel-2);
+            overflow: hidden;
         }
-        .drop-zone:hover { border-color: var(--accent-svm); background: #192233; }
-        .drop-zone input[type="file"] {
-            position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
-        }
-        .drop-zone p { font-size: 14px; color: var(--muted); }
-        .drop-zone strong { color: var(--accent-svm); }
 
-        .btn {
-            width: 100%;
-            margin-top: 14px;
-            padding: 12px;
-            background: linear-gradient(120deg, #4af0c4, #3aa6f7);
-            color: #051018;
-            border: none;
-            border-radius: 10px;
-            font-family: var(--sans);
-            font-size: 15px;
-            font-weight: 700;
+        .drop-zone.dragging {
+            border-color: var(--blue);
+            background: var(--soft-blue);
+        }
+
+        .drop-zone input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
             cursor: pointer;
-            transition: transform .15s, filter .2s;
-        }
-        .btn:hover { filter: brightness(1.05); transform: translateY(-1px); }
-        .btn:active { transform: translateY(0); }
-
-        .alert {
-            margin-top: 12px;
-            padding: 10px 12px;
-            border-radius: 8px;
-            font-size: 12px;
-            line-height: 1.45;
-        }
-        .alert-warn  { background: #2b2000; border: 1px solid #5d4a1b; color: #f5b44b; }
-        .alert-error { background: #231011; border: 1px solid #5b1e21; color: #ff7f7f; }
-        .is-hidden { display: none !important; }
-
-        .results {
-            max-width: 1400px;
-            margin: 0 auto;
-            animation: fadeUp 0.5s ease-out;
-        }
-        .columns {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 18px;
-        }
-        @media (max-width: 1100px) { .columns { grid-template-columns: 1fr; } }
-
-        .column {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            --accent-color: var(--accent-svm);
-        }
-        .column-svm { order: 2; }
-        .column-cnn { --accent-color: var(--accent-cnn); order: 1; }
-
-        .column-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 16px;
-            border-radius: 12px;
-            background: linear-gradient(120deg, rgba(73, 240, 196, 0.12), rgba(24, 40, 59, 0.4));
-            border: 1px solid var(--border);
-        }
-        .column-cnn .column-header {
-            background: linear-gradient(120deg, rgba(255, 138, 92, 0.18), rgba(28, 22, 18, 0.6));
-        }
-        .column-badge {
-            font-family: var(--mono);
-            font-size: 10px;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            padding: 6px 10px;
-            border-radius: 999px;
-            background: var(--accent-color);
-            color: var(--accent-ink);
-            font-weight: 700;
-        }
-        .column-title {
-            font-size: 15px;
-            font-weight: 600;
-        }
-        .column-subtitle {
-            font-size: 12px;
-            color: var(--muted);
         }
 
-        .section-label {
-            font-family: var(--mono);
-            font-size: 11px;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: var(--muted);
-            margin-bottom: 12px;
-        }
-
-        .pipeline-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-        .pipeline-step {
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            padding: 6px 12px;
-            font-family: var(--mono);
-            font-size: 10px;
-            color: var(--accent-color);
-            white-space: nowrap;
-        }
-        .pipeline-arrow { color: var(--muted2); font-size: 15px; }
-
-        .overview-grid {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 12px;
-        }
-        @media (max-width: 900px) { .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-
-        .img-card {
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            min-width: 0;
-        }
-        .img-card .step-num { font-family: var(--mono); font-size: 9px; color: var(--muted); }
-        .img-card .step-title { font-size: 12px; font-weight: 600; }
-        .img-card .step-desc  { font-size: 10px; color: var(--muted); line-height: 1.4; }
-
-        .img-frame {
-            width: 100%;
-            aspect-ratio: 1/1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #0a0f17;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        .img-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
-        .predict-frame {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 4px;
+        .drop-copy {
             text-align: center;
-            font-size: 12px;
-            color: var(--text);
+            padding: 18px;
+            color: var(--muted);
+            font-size: 14px;
         }
-        .predict-frame .predict-label { font-size: 14px; font-weight: 700; color: var(--accent-color); }
 
-        .classification-list {
-            display: grid;
+        .drop-copy strong {
+            color: var(--blue);
+        }
+
+        .preview {
+            width: 100%;
+            display: none;
+            grid-template-columns: 92px 1fr;
             gap: 12px;
-        }
-        .classification-item {
-            padding: 12px;
-            border-radius: 10px;
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-        }
-        .classification-item .label {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--accent-color);
-        }
-        .classification-item .meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
-
-        .roi-list { display: flex; flex-direction: column; gap: 16px; }
-        .roi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-        .roi-header {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 14px;
             align-items: center;
-            justify-content: space-between;
-            padding: 10px 16px;
-            background: var(--surface-2);
-            border-bottom: 1px solid var(--border);
+            padding: 12px;
         }
-        .roi-index { font-family: var(--mono); font-size: 10px; color: var(--muted); }
-        .roi-label { font-size: 15px; font-weight: 700; color: var(--accent-color); }
-        .roi-score {
-            font-family: var(--mono);
-            font-size: 11px;
-            background: rgba(74, 240, 196, 0.15);
-            color: var(--accent-color);
-            border: 1px solid rgba(74, 240, 196, 0.3);
-            padding: 4px 10px;
-            border-radius: 999px;
-        }
-        .column-cnn .roi-score {
-            background: rgba(255, 138, 92, 0.15);
-            border-color: rgba(255, 138, 92, 0.3);
-        }
-        .roi-body { padding: 12px; }
-        .roi-pipeline { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-        .roi-pipeline.svm { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-        .roi-pipeline.cnn-main { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-        .roi-pipeline.cnn-final { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px; }
-        @media (max-width: 900px) { .roi-pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-        .roi-step { display: flex; flex-direction: column; gap: 6px; }
-        .step-label {
-            font-size: 10px;
+        .preview img {
+            width: 92px;
+            height: 92px;
+            object-fit: contain;
+            border-radius: 8px;
+            background: #0f172a;
+            border: 1px solid var(--line);
+        }
+
+        .preview-name {
+            font-weight: 750;
+            word-break: break-word;
+        }
+
+        .preview-meta {
+            margin-top: 5px;
             color: var(--muted);
             font-family: var(--mono);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            font-size: 12px;
         }
 
-        .feature-grid {
-            margin-top: 12px;
+        .tabs {
+            margin-top: 16px;
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 12px;
-        }
-        @media (max-width: 900px) { .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-        .feature-card {
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 10px;
-            display: flex;
-            flex-direction: column;
+            grid-template-columns: 1fr 1fr;
             gap: 8px;
         }
 
-        .placeholder-text { color: var(--muted); font-style: italic; }
-        .placeholder-frame { color: var(--muted); font-size: 11px; border: 1px dashed var(--border); background: #101621; }
-        .empty-state {
-            max-width: 860px;
-            margin: 30px auto 0;
-            padding: 60px 40px;
-            text-align: center;
+        .tab-button {
+            min-height: 40px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--panel-2);
             color: var(--muted);
-            border: 2px dashed var(--border);
-            border-radius: 16px;
+            font-weight: 750;
         }
-        .empty-state p { font-size: 14px; line-height: 1.6; }
 
-        @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
+        .tab-button.active {
+            border-color: var(--blue);
+            color: var(--blue);
+            background: var(--soft-blue);
+        }
+
+        .tab-pane {
+            display: none;
+            margin-top: 16px;
+        }
+
+        .tab-pane.active {
+            display: block;
+        }
+
+        .model-rail {
+            display: grid;
+            gap: 8px;
+        }
+
+        .model-button {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            align-items: center;
+            width: 100%;
+            min-height: 46px;
+            text-align: left;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--panel-2);
+            color: var(--ink);
+            padding: 10px 12px;
+        }
+
+        .model-button.active {
+            border-color: var(--green);
+            background: var(--soft-green);
+        }
+
+        .model-name {
+            font-weight: 800;
+            font-size: 14px;
+        }
+
+        .model-meta {
+            margin-top: 2px;
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 11px;
+        }
+
+        .model-tag {
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            background: #ffffff;
+            color: var(--muted);
+            padding: 4px 8px;
+            font-family: var(--mono);
+            font-size: 11px;
+        }
+
+        .compare-selectors {
+            display: grid;
+            gap: 12px;
+        }
+
+        .field label {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 750;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .field select {
+            width: 100%;
+            min-height: 42px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--panel-2);
+            color: var(--ink);
+            padding: 0 10px;
+        }
+
+        .primary-action {
+            width: 100%;
+            min-height: 46px;
+            margin-top: 16px;
+            border: 0;
+            border-radius: 8px;
+            background: var(--dark);
+            color: #ffffff;
+            font-weight: 850;
+        }
+
+        .primary-action:disabled {
+            cursor: wait;
+            opacity: 0.6;
+        }
+
+        .alert {
+            margin-top: 12px;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .alert-error {
+            border: 1px solid #fecaca;
+            background: #fff1f2;
+            color: #9f1239;
+        }
+
+        .results {
+            min-height: 620px;
+            padding: 16px;
+        }
+
+        .empty-state {
+            height: 560px;
+            display: grid;
+            place-items: center;
+            border: 1px dashed var(--line-strong);
+            border-radius: 8px;
+            background: var(--panel-2);
+            color: var(--muted);
+            text-align: center;
+            padding: 24px;
+        }
+
+        .empty-state strong {
+            display: block;
+            color: var(--ink);
+            font-size: 18px;
+            margin-bottom: 6px;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--line);
+            margin-bottom: 16px;
+        }
+
+        .result-title {
+            margin: 0;
+            font-size: 20px;
+        }
+
+        .result-subtitle {
+            margin-top: 5px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .model-chip {
+            border-radius: 999px;
+            padding: 7px 10px;
+            background: var(--soft-orange);
+            border: 1px solid #fed7aa;
+            color: #9a3412;
+            font-family: var(--mono);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .pipeline {
+            display: grid;
+            gap: 12px;
+        }
+
+        .step-card {
+            display: grid;
+            grid-template-columns: 34px minmax(260px, 0.95fr) minmax(240px, 1.05fr);
+            gap: 14px;
+            align-items: stretch;
+            padding: 12px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #ffffff;
+        }
+
+        .step-index {
+            width: 34px;
+            height: 34px;
+            display: grid;
+            place-items: center;
+            border-radius: 8px;
+            background: var(--dark);
+            color: #ffffff;
+            font-family: var(--mono);
+            font-weight: 800;
+            font-size: 13px;
+        }
+
+        .step-media {
+            min-height: 190px;
+            display: grid;
+            place-items: center;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #f1f5f9;
+            overflow: hidden;
+        }
+
+        .step-media img {
+            width: 100%;
+            height: 100%;
+            max-height: 260px;
+            object-fit: contain;
+            display: block;
+        }
+
+        .step-detail h3 {
+            margin: 2px 0 6px;
+            font-size: 16px;
+        }
+
+        .step-detail {
+            min-width: 0;
+        }
+
+        .step-detail p {
+            margin: 0 0 10px;
+            color: var(--muted);
+            line-height: 1.5;
+            font-size: 13px;
+        }
+
+        .kv-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .kv {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--panel-2);
+            padding: 8px;
+            min-width: 0;
+        }
+
+        .kv span {
+            display: block;
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .kv strong {
+            display: block;
+            margin-top: 4px;
+            font-family: var(--mono);
+            font-size: 13px;
+            overflow-wrap: anywhere;
+        }
+
+        .output-card {
+            display: grid;
+            grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+            gap: 14px;
+            align-items: stretch;
+            min-width: 0;
+        }
+
+        .prediction-box {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--soft-green);
+            padding: 14px;
+            display: grid;
+            align-content: center;
+        }
+
+        .prediction-label {
+            color: var(--green);
+            font-size: 28px;
+            font-weight: 900;
+            line-height: 1.1;
+            overflow-wrap: anywhere;
+        }
+
+        .prediction-score {
+            margin-top: 8px;
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 13px;
+        }
+
+        .score-list {
+            display: grid;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .score-row {
+            display: grid;
+            grid-template-columns: minmax(72px, 96px) minmax(42px, 1fr) 58px;
+            gap: 8px;
+            align-items: center;
+            font-size: 13px;
+            min-width: 0;
+        }
+
+        .score-label {
+            font-weight: 800;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .score-bar {
+            height: 10px;
+            background: #e5e7eb;
+            border-radius: 999px;
+            overflow: hidden;
+            min-width: 36px;
+        }
+
+        .score-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--blue), var(--green));
+        }
+
+        .score-value {
+            text-align: right;
+            font-family: var(--mono);
+            color: var(--muted);
+        }
+
+        .compare-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .compare-column {
+            min-width: 0;
+        }
+
+        .compare-column .result-header {
+            margin-bottom: 12px;
+        }
+
+        .compare-column .step-card {
+            grid-template-columns: 28px minmax(180px, 0.95fr) minmax(160px, 1.05fr);
+        }
+
+        .compare-column .step-media {
+            min-height: 160px;
+        }
+
+        .compare-column .step-detail h3 {
+            font-size: 14px;
+        }
+
+        .compare-column .step-detail p {
+            font-size: 12px;
+        }
+
+        .compare-column .kv-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .compare-column .output-card {
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+
+        .compare-column .score-row {
+            grid-template-columns: minmax(78px, 120px) minmax(54px, 1fr) 58px;
+            font-size: 12px;
+        }
+
+        .is-hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 1180px) {
+            .workspace {
+                grid-template-columns: 1fr;
+            }
+
+            .control-panel {
+                position: static;
+            }
+
+            .compare-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 760px) {
+            .shell {
+                width: min(100% - 20px, 1500px);
+                padding-top: 12px;
+            }
+
+            .topbar {
+                grid-template-columns: 1fr;
+            }
+
+            .status-pill {
+                justify-self: start;
+            }
+
+            .step-card,
+            .compare-column .step-card {
+                grid-template-columns: 1fr;
+            }
+
+            .step-index {
+                width: 100%;
+                height: 30px;
+            }
+
+            .kv-grid,
+            .compare-column .kv-grid,
+            .output-card {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
-
-<div class="bg-orb orb-1"></div>
-<div class="bg-orb orb-2"></div>
-
-<header class="header">
-    <div class="header-left">
-        <span class="badge">Vision Lab</span>
-        <div>
-            <h1>Traffic Sign Classifier</h1>
-            <p>Side-by-side comparison of CNN and SVM HOG with feature visualization.</p>
-        </div>
-    </div>
-    <div class="header-meta">Upload one image and compare the pipelines</div>
-</header>
-
-<section class="upload-center card">
-    <div class="upload-title">Upload image</div>
-    <form id="upload-form" method="POST" action="http://localhost:5000/api/predict" enctype="multipart/form-data">
-        <div class="drop-zone">
-            <p>Drag and drop or <strong>choose a file</strong></p>
-            <input id="file-input" type="file" name="file" accept="image/*" required>
-        </div>
-        <button id="submit-btn" type="submit" class="btn">Analyze and predict</button>
-    </form>
-    <div id="error-box" class="alert alert-error is-hidden"></div>
-    <div id="fallback-box" class="alert alert-warn is-hidden">
-        Warning: No sign region detected via color masking. Using the full image as fallback.
-    </div>
-</section>
-
-<div id="results-sections" class="results is-hidden">
-    <div class="columns">
-        <section class="column column-svm">
-            <div class="column-header">
-                <span class="column-badge">SVM + HOG</span>
+    <main class="shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark">HOG</div>
                 <div>
-                    <div class="column-title">Classic pipeline</div>
-                    <div class="column-subtitle">Color masks, ROI crop, HOG features, SVM prediction.</div>
+                    <h1>Traffic Sign Model Lab</h1>
+                    <p>Four classical HOG classifiers with visible feature extraction.</p>
                 </div>
             </div>
+            <div id="model-status" class="status-pill">Loading models</div>
+        </header>
 
-            <div class="card">
-                <div class="section-label">Pipeline</div>
-                <div class="pipeline-strip">
-                    <span class="pipeline-step">Upload</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Color Mask</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Clean Mask</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Contour + Shape</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Crop ROI</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Resize 64x64</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Grayscale</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">HOG</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">SVM Predict</span>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="section-label">Stages 1-4 · Sign region detection</div>
-                <div class="overview-grid">
-                    <div class="img-card">
-                        <div class="step-top">
-                            <div>
-                                <div class="step-title">Original Image</div>
-                                <div class="step-desc">Ảnh đầu vào người dùng upload.</div>
-                            </div>
-                            <div class="step-num">STAGE 1</div>
-                            <div class="step-title">Original image</div>
-                            <div class="step-desc">Input image as uploaded.</div>
-                        </div>
-                        <div class="img-frame"><img id="svm-img-original" alt="Original"></div>
+        <div class="workspace">
+            <aside class="panel control-panel">
+                <h2 class="section-title">Input image</h2>
+                <label id="drop-zone" class="drop-zone">
+                    <input id="file-input" type="file" accept="image/*">
+                    <div id="drop-copy" class="drop-copy">
+                        <strong>Choose an image</strong>
+                        <div>or drop it here</div>
                     </div>
-                    <div class="img-card">
+                    <div id="preview" class="preview">
+                        <img id="preview-img" alt="Selected image preview">
                         <div>
-                            <div class="step-num">STAGE 2</div>
-                            <div class="step-title">Color mask</div>
-                            <div class="step-desc">HSV ranges for sign colors.</div>
+                            <div id="preview-name" class="preview-name"></div>
+                            <div id="preview-meta" class="preview-meta"></div>
                         </div>
-                        <div class="img-frame"><img id="svm-img-raw-mask" alt="Raw mask"></div>
                     </div>
-                    <div class="img-card">
-                        <div>
-                            <div class="step-num">STAGE 3</div>
-                            <div class="step-title">Clean mask</div>
-                            <div class="step-desc">Open, close, and dilate.</div>
+                </label>
+
+                <div class="tabs" role="tablist">
+                    <button id="single-tab-btn" class="tab-button active" type="button">Single model</button>
+                    <button id="compare-tab-btn" class="tab-button" type="button">Compare models</button>
+                </div>
+
+                <section id="single-pane" class="tab-pane active">
+                    <h2 class="section-title">Model selector</h2>
+                    <div id="model-rail" class="model-rail"></div>
+                    <button id="single-run-btn" class="primary-action" type="button">Run selected model</button>
+                </section>
+
+                <section id="compare-pane" class="tab-pane">
+                    <h2 class="section-title">Compare selector</h2>
+                    <div class="compare-selectors">
+                        <div class="field">
+                            <label for="left-model">Left model</label>
+                            <select id="left-model"></select>
                         </div>
-                        <div class="img-frame"><img id="svm-img-clean-mask" alt="Clean mask"></div>
+                        <div class="field">
+                            <label for="right-model">Right model</label>
+                            <select id="right-model"></select>
+                        </div>
                     </div>
-                    <div class="img-card">
-                        <div>
-                            <div class="step-num">STAGE 4</div>
-                            <div class="step-title">Bounding boxes</div>
-                            <div class="step-desc">Shape filter and NMS.</div>
-                        </div>
-                        <div class="img-frame"><img id="svm-img-boxed" alt="Boxed"></div>
+                    <button id="compare-run-btn" class="primary-action" type="button">Run comparison</button>
+                </section>
+
+                <div id="error-box" class="alert alert-error is-hidden"></div>
+            </aside>
+
+            <section id="results" class="panel results">
+                <div id="empty-state" class="empty-state">
+                    <div>
+                        <strong>No analysis yet</strong>
+                        <span>Select an image and run a HOG model.</span>
                     </div>
                 </div>
-            </div>
+                <div id="single-results" class="is-hidden"></div>
+                <div id="compare-results" class="is-hidden"></div>
+            </section>
+        </div>
+    </main>
 
-            <div class="card">
-                <div class="section-label">Predictions</div>
-                <div id="svm-error-box" class="alert alert-error is-hidden"></div>
-                <div id="svm-classification-results" class="classification-list">
-                    <div class="classification-item">
-                        <div class="label placeholder-text">Awaiting upload</div>
-                        <div class="meta">Confidence: --</div>
-                    </div>
-                </div>
-            </div>
+    <script>
+        (() => {
+            const state = {
+                models: [],
+                activeTab: "single",
+                selectedSingle: "",
+                file: null,
+            };
 
-            <div class="card">
-                <div class="section-label">ROI feature extraction</div>
-                <div class="roi-list" id="svm-roi-list"></div>
-            </div>
-        </section>
+            const els = {
+                modelStatus: document.getElementById("model-status"),
+                fileInput: document.getElementById("file-input"),
+                dropZone: document.getElementById("drop-zone"),
+                dropCopy: document.getElementById("drop-copy"),
+                preview: document.getElementById("preview"),
+                previewImg: document.getElementById("preview-img"),
+                previewName: document.getElementById("preview-name"),
+                previewMeta: document.getElementById("preview-meta"),
+                singleTabBtn: document.getElementById("single-tab-btn"),
+                compareTabBtn: document.getElementById("compare-tab-btn"),
+                singlePane: document.getElementById("single-pane"),
+                comparePane: document.getElementById("compare-pane"),
+                modelRail: document.getElementById("model-rail"),
+                leftModel: document.getElementById("left-model"),
+                rightModel: document.getElementById("right-model"),
+                singleRunBtn: document.getElementById("single-run-btn"),
+                compareRunBtn: document.getElementById("compare-run-btn"),
+                errorBox: document.getElementById("error-box"),
+                emptyState: document.getElementById("empty-state"),
+                singleResults: document.getElementById("single-results"),
+                compareResults: document.getElementById("compare-results"),
+            };
 
-        <section class="column column-cnn">
-            <div class="column-header">
-                <span class="column-badge">CNN</span>
-                <div>
-                    <div class="column-title">Deep feature pipeline</div>
-                    <div class="column-subtitle">Crop ROI, normalize, conv feature maps, softmax, Grad-CAM overlay.</div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="section-label">Pipeline</div>
-                <div class="pipeline-strip">
-                    <span class="pipeline-step">Upload</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Crop ROI</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Resize 64x64</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Normalize</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Feature maps conv1</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Feature maps conv2</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Feature maps conv3</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Predict (softmax)</span>
-                    <span class="pipeline-arrow">→</span>
-                    <span class="pipeline-step">Grad-CAM heatmap</span>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="section-label">Predictions</div>
-                <div id="cnn-error-box" class="alert alert-error is-hidden"></div>
-                <div id="cnn-classification-results" class="classification-list">
-                    <div class="classification-item">
-                        <div class="label placeholder-text">Awaiting upload</div>
-                        <div class="meta">Confidence: --</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="section-label">Feature visualization per ROI</div>
-                <div class="roi-list" id="cnn-roi-list"></div>
-            </div>
-        </section>
-    </div>
-</div>
-
-<div id="empty-state" class="empty-state">
-    <p>Upload a traffic sign image to start the side-by-side comparison.</p>
-</div>
-
-<script>
-    (() => {
-        const resolveApiOrigin = () => {
-            const { protocol, hostname, port, origin } = window.location;
-            if (protocol === "file:") {
-                return "http://localhost:5000";
-            }
-            if (port === "5000") {
-                return origin;
-            }
-            const host = hostname || "localhost";
-            return `${protocol}//${host}:5000`;
-        };
-
-        const apiOrigin = resolveApiOrigin();
-        const apiUrl = `${apiOrigin}/api/predict`;
-        const form = document.getElementById("upload-form");
-        if (!form) {
-            return;
-        }
-        form.action = apiUrl;
-
-        const fileInput = document.getElementById("file-input");
-        const fileName = document.getElementById("file-name");
-        const submitBtn = document.getElementById("submit-btn");
-        const errorBox = document.getElementById("error-box");
-        const fallbackBox = document.getElementById("fallback-box");
-        const resultsSections = document.getElementById("results-sections");
-        const emptyState = document.getElementById("empty-state");
-
-        const svmClassificationResults = document.getElementById("svm-classification-results");
-        const cnnClassificationResults = document.getElementById("cnn-classification-results");
-        const svmRoiList = document.getElementById("svm-roi-list");
-        const cnnRoiList = document.getElementById("cnn-roi-list");
-        const svmErrorBox = document.getElementById("svm-error-box");
-        const cnnErrorBox = document.getElementById("cnn-error-box");
-
-        let hasResults = false;
-
-        const setHidden = (el, hidden) => {
-            if (!el) {
-                return;
-            }
-            el.classList.toggle("is-hidden", hidden);
-        };
-
-        const setResultsVisible = (visible) => {
-            setHidden(resultsSections, !visible);
-            setHidden(emptyState, visible);
-        };
-
-        const escapeHtml = (value) => String(value)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#39;");
-
-        const setImg = (id, src) => {
-            const img = document.getElementById(id);
-            if (img) {
-                img.src = src || "";
-            }
-        };
-
-        const renderClassification = (roiResults, container, accentVar) => {
-            if (!container) {
-                return;
-            }
-            if (!roiResults || roiResults.length === 0) {
-                container.innerHTML = `
-                    <div class="classification-item">
-                        <div class="label placeholder-text">Awaiting upload</div>
-                        <div class="meta">Confidence: --</div>
-                    </div>
-                `;
-                renderMainPrediction([]);
-                return;
-            }
-
-            container.innerHTML = roiResults.map((r, idx) => {
-                const label = escapeHtml(r.label ?? "Unknown");
-                const score = escapeHtml(formatScore(r.score));
-                return `
-                    <div class="classification-item" style="--accent-color: var(${accentVar});">
-                        <div class="label">${label}</div>
-                        <div class="meta">ROI ${idx + 1} · Confidence: ${escapeHtml(score)}</div>
-                    </div>
-                `;
-            }).join("");
-
-            renderMainPrediction(roiResults);
-        };
-
-        const renderSvmRoiList = (roiResults) => {
-            if (!svmRoiList) {
-                return;
-            }
-            if (!roiResults || roiResults.length === 0) {
-                svmRoiList.innerHTML = `
-                    <div class="roi-card">
-                        <div class="roi-header">
-                            <span class="roi-index">ROI - / 0</span>
-                            <span class="roi-label placeholder-text">No ROI detected</span>
-                            <span class="roi-score">--</span>
-                        </div>
-                        <div class="roi-body">
-                            <div class="roi-pipeline svm">
-                                <div class="roi-step">
-                                    <span class="step-label">Crop ROI</span>
-                                    <div class="img-frame placeholder-frame">Awaiting input</div>
-                                </div>
-                                <div class="roi-step">
-                                    <span class="step-label">Resize 64x64</span>
-                                    <div class="img-frame placeholder-frame">Awaiting input</div>
-                                </div>
-                                <div class="roi-step">
-                                    <span class="step-label">Grayscale</span>
-                                    <div class="img-frame placeholder-frame">Awaiting input</div>
-                                </div>
-                                <div class="roi-step">
-                                    <span class="step-label">HOG</span>
-                                    <div class="img-frame placeholder-frame">Awaiting input</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                return;
-            }
-
-            svmRoiList.innerHTML = roiResults.map((r, idx) => {
-                const label = escapeHtml(r.label ?? "Unknown");
-                const score = (r.score === null || r.score === undefined) ? "--" : `${r.score}%`;
-                return `
-                    <div class="roi-card">
-                        <div class="roi-header">
-                            <span class="roi-index">ROI ${idx + 1} / ${roiResults.length}</span>
-                            <span class="roi-label">${label}</span>
-                            <span class="roi-score">${escapeHtml(score)}</span>
-                        </div>
-                        <div class="roi-body">
-                            <div class="roi-pipeline svm">
-                                <div class="roi-step">
-                                    <span class="step-label">Crop ROI</span>
-                                    <div class="img-frame"><img src="${r.crop_b64 || ""}" alt="Crop"></div>
-                                </div>
-                                <div class="roi-step">
-                                    <span class="step-label">Resize 64x64</span>
-                                    <div class="img-frame"><img src="${r.resized_b64 || ""}" alt="Resized"></div>
-                                </div>
-                                <div class="roi-step">
-                                    <span class="step-label">Grayscale</span>
-                                    <div class="img-frame"><img src="${r.grayscale_b64 || ""}" alt="Gray"></div>
-                                </div>
-                                <div class="roi-step">
-                                    <span class="step-label">HOG</span>
-                                    <div class="img-frame"><img src="${r.hog_b64 || ""}" alt="HOG"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join("");
-        };
-
-        const renderCnnRoiList = (roiResults) => {
-            if (!cnnRoiList) {
-                return;
-            }
-            if (!roiResults || roiResults.length === 0) {
-                cnnRoiList.innerHTML = `
-                    <div class="roi-card">
-                        <div class="roi-header">
-                            <span class="roi-index">ROI - / 0</span>
-                            <span class="roi-label placeholder-text">No ROI detected</span>
-                            <span class="roi-score">--</span>
-                        </div>
-                        <div class="roi-body">
-                            <div class="roi-pipeline cnn-main">
-                                <div class="roi-step">
-                                    <span class="step-label">Crop ROI</span>
-                                    <div class="img-frame placeholder-frame">Awaiting input</div>
-                                </div>
-                                <div class="roi-step">
-                                    <span class="step-label">Resize 64x64</span>
-                                    <div class="img-frame placeholder-frame">Awaiting input</div>
-                                </div>
-                                <div class="roi-step">
-                                    <span class="step-label">Normalize</span>
-                                    <div class="img-frame placeholder-frame">Awaiting input</div>
-                                </div>
-                            </div>
-                            <div class="feature-grid">
-                                <div class="feature-card">
-                                    <div class="step-label">Feature maps · conv1</div>
-                                    <div class="img-frame placeholder-frame">Awaiting input</div>
-                                </div>
-                                <div class="feature-card">
-                                    <div class="step-label">Feature maps · conv2</div>
-                                    <div class="img-frame placeholder-frame">Awaiting input</div>
-                                </div>
-                                <div class="feature-card">
-                                    <div class="step-label">Feature maps · conv3</div>
-                                    <div class="img-frame placeholder-frame">Awaiting input</div>
-                                </div>
-                            </div>
-                            <div class="roi-pipeline cnn-final">
-                                <div class="roi-step">
-                                    <span class="step-label">Predict (softmax)</span>
-                                    <div class="img-frame placeholder-frame">Awaiting input</div>
-                                </div>
-                                <div class="roi-step">
-                                    <span class="step-label">Grad-CAM heatmap</span>
-                                    <div class="img-frame placeholder-frame">Awaiting input</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                return;
-            }
-
-            cnnRoiList.innerHTML = roiResults.map((r, idx) => {
-                const label = escapeHtml(r.label ?? "Unknown");
-                const score = (r.score === null || r.score === undefined) ? "--" : `${r.score}%`;
-                const featureMaps = Array.isArray(r.feature_maps) ? r.feature_maps : [];
-                const normalizedSrc = r.normalized_b64 || r.resized_b64 || "";
-                const featureMarkup = featureMaps.length === 0
-                    ? ["conv1", "conv2", "conv3"].map((name) => `
-                        <div class="feature-card">
-                            <div class="step-label">Feature maps · ${name}</div>
-                            <div class="img-frame placeholder-frame">Unavailable</div>
-                        </div>
-                    `).join("")
-                    : featureMaps.map((f) => `
-                        <div class="feature-card">
-                            <div class="step-label">Feature maps · ${escapeHtml(f.name || "conv")}</div>
-                            <div class="img-frame"><img src="${f.grid_b64 || ""}" alt="Feature map"></div>
-                        </div>
-                    `).join("");
-
-                return `
-                    <div class="roi-card">
-                        <div class="roi-header">
-                            <span class="roi-index">ROI ${idx + 1} / ${roiResults.length}</span>
-                            <span class="roi-label">${label}</span>
-                            <span class="roi-score">${escapeHtml(score)}</span>
-                        </div>
-                        <div class="roi-body">
-                            <div class="roi-pipeline cnn-main">
-                                <div class="roi-step">
-                                    <span class="step-label">Crop ROI</span>
-                                    <div class="img-frame"><img src="${r.crop_b64 || ""}" alt="Crop"></div>
-                                </div>
-                                <div class="roi-step">
-                                    <span class="step-label">Resize 64x64</span>
-                                    <div class="img-frame"><img src="${r.resized_b64 || ""}" alt="Resized"></div>
-                                </div>
-                                <div class="roi-step">
-                                    <span class="step-label">Normalize</span>
-                                    <div class="img-frame"><img src="${normalizedSrc}" alt="Normalize"></div>
-                                </div>
-                            </div>
-                            <div class="feature-grid">${featureMarkup}</div>
-                            <div class="roi-pipeline cnn-final">
-                                <div class="roi-step">
-                                    <span class="step-label">Predict (softmax)</span>
-                                    <div class="img-frame predict-frame">
-                                        <div class="predict-label">${label}</div>
-                                        <div>${escapeHtml(score)}</div>
-                                    </div>
-                                </div>
-                                <div class="roi-step">
-                                    <span class="step-label">Grad-CAM heatmap</span>
-                                    <div class="img-frame"><img src="${r.gradcam_b64 || ""}" alt="Grad-CAM"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join("");
-        };
-
-        if (fileInput) {
-            fileInput.addEventListener("change", () => {
-                if (!fileName) {
-                    return;
+            const apiBase = (() => {
+                if (window.location.protocol === "file:") {
+                    return "http://localhost:5000";
                 }
-                const file = fileInput.files && fileInput.files[0];
-                fileName.textContent = file ? `Đã chọn: ${file.name}` : "Chưa chọn ảnh.";
-            });
-        }
+                return window.location.origin;
+            })();
 
-        form.addEventListener("submit", async (event) => {
-            event.preventDefault();
-            setHidden(errorBox, true);
-            setHidden(fallbackBox, true);
-            setHidden(svmErrorBox, true);
-            setHidden(cnnErrorBox, true);
+            const escapeHtml = (value) => String(value ?? "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
 
-            if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-                if (errorBox) {
-                    errorBox.innerHTML = "Error: Please choose an image file.";
-                    setHidden(errorBox, false);
+            const setHidden = (element, hidden) => {
+                element.classList.toggle("is-hidden", hidden);
+            };
+
+            const showError = (message) => {
+                els.errorBox.textContent = message;
+                setHidden(els.errorBox, false);
+            };
+
+            const clearError = () => {
+                els.errorBox.textContent = "";
+                setHidden(els.errorBox, true);
+            };
+
+            const setLoading = (loading) => {
+                els.singleRunBtn.disabled = loading;
+                els.compareRunBtn.disabled = loading;
+                els.singleRunBtn.textContent = loading ? "Running..." : "Run selected model";
+                els.compareRunBtn.textContent = loading ? "Running..." : "Run comparison";
+            };
+
+            const formatScore = (score) => {
+                if (score === null || score === undefined || Number.isNaN(Number(score))) {
+                    return "--";
                 }
-                return;
-            }
+                return `${Number(score).toFixed(2)}%`;
+            };
 
-            const formData = new FormData();
-            formData.append("file", fileInput.files[0]);
+            const formatHogParams = (params) => {
+                const ppc = params.pixels_per_cell || [];
+                const cpb = params.cells_per_block || [];
+                return `ori=${params.orientations}, ppc=${ppc.join("x")}, cpb=${cpb.join("x")}`;
+            };
 
-            const useMaskingCheckbox = document.getElementById("use-masking-checkbox");
-            formData.append("use_masking", useMaskingCheckbox && useMaskingCheckbox.checked ? "true" : "false");
+            const formatFeatureExtractor = (modelOrResult) => {
+                const name = modelOrResult.feature_extractor || "HOG";
+                const hsvBins = modelOrResult.hsv_hist_bins;
+                if (name === "HOG_HSV" && Array.isArray(hsvBins)) {
+                    return `HOG + HSV(${hsvBins.join("-")})`;
+                }
+                return name;
+            };
 
-            if (submitBtn) {
-                submitBtn.disabled = true;
-                submitBtn.textContent = "Analyzing...";
-                submitBtn.textContent = "Analyzing...";
-            }
+            const setActiveTab = (tab) => {
+                state.activeTab = tab;
+                els.singleTabBtn.classList.toggle("active", tab === "single");
+                els.compareTabBtn.classList.toggle("active", tab === "compare");
+                els.singlePane.classList.toggle("active", tab === "single");
+                els.comparePane.classList.toggle("active", tab === "compare");
+                setHidden(els.singleResults, tab !== "single" || !els.singleResults.dataset.hasResult);
+                setHidden(els.compareResults, tab !== "compare" || !els.compareResults.dataset.hasResult);
+                setHidden(els.emptyState, Boolean(
+                    (tab === "single" && els.singleResults.dataset.hasResult) ||
+                    (tab === "compare" && els.compareResults.dataset.hasResult)
+                ));
+            };
 
-            try {
-                const response = await fetch(apiUrl, {
-                    method: "POST",
-                    body: formData,
+            const populateModels = (models) => {
+                state.models = models;
+                state.selectedSingle = models[0] ? models[0].id : "";
+
+                els.modelRail.innerHTML = models.map((model) => `
+                    <button class="model-button ${model.id === state.selectedSingle ? "active" : ""}" type="button" data-model-id="${escapeHtml(model.id)}">
+                        <span>
+                            <span class="model-name">${escapeHtml(model.name)}</span>
+                            <span class="model-meta">${escapeHtml(model.type)} | ${escapeHtml(formatFeatureExtractor(model))} | ${escapeHtml(formatHogParams(model.hog_params))}</span>
+                        </span>
+                        <span class="model-tag">${escapeHtml(model.tag)}</span>
+                    </button>
+                `).join("");
+
+                const options = models.map((model) => `
+                    <option value="${escapeHtml(model.id)}">${escapeHtml(model.name)}</option>
+                `).join("");
+                els.leftModel.innerHTML = options;
+                els.rightModel.innerHTML = options;
+                if (models[0]) {
+                    els.leftModel.value = models[0].id;
+                }
+                if (models[1]) {
+                    els.rightModel.value = models[1].id;
+                }
+
+                els.modelRail.querySelectorAll(".model-button").forEach((button) => {
+                    button.addEventListener("click", () => {
+                        state.selectedSingle = button.dataset.modelId;
+                        els.modelRail.querySelectorAll(".model-button").forEach((item) => {
+                            item.classList.toggle("active", item === button);
+                        });
+                    });
                 });
-                const rawText = await response.text();
-                let data = {};
-                try {
-                    data = rawText ? JSON.parse(rawText) : {};
-                } catch (parseErr) {
-                    data = {};
-                }
 
-                if (!response.ok || data.error) {
-                    const message = data && data.error
-                        ? data.error
-                        : `Request failed (${response.status}).`;
-                    if (errorBox) {
-                        errorBox.innerHTML = `Error: ${escapeHtml(message)}`;
-                        setHidden(errorBox, false);
-                    }
-                    if (!hasResults) {
-                        setResultsVisible(false);
-                    }
+                els.modelStatus.textContent = `${models.length} HOG models loaded`;
+            };
+
+            const handleFile = (file) => {
+                if (!file) {
                     return;
                 }
+                state.file = file;
+                clearError();
+                els.previewName.textContent = file.name;
+                els.previewMeta.textContent = `${(file.size / 1024).toFixed(1)} KB`;
+                els.previewImg.src = URL.createObjectURL(file);
+                els.dropCopy.style.display = "none";
+                els.preview.style.display = "grid";
+            };
 
-                const svm = data.svm || {};
-                const cnn = data.cnn || {};
-
-                if (svm.error && svmErrorBox) {
-                    svmErrorBox.innerHTML = `Error: ${escapeHtml(svm.error)}`;
-                    setHidden(svmErrorBox, false);
+            const requestPrediction = async (modelIds) => {
+                if (!state.file) {
+                    showError("Please choose an image first.");
+                    return null;
                 }
-                if (cnn.error && cnnErrorBox) {
-                    cnnErrorBox.innerHTML = `Error: ${escapeHtml(cnn.error)}`;
-                    setHidden(cnnErrorBox, false);
+                clearError();
+                setLoading(true);
+
+                const formData = new FormData();
+                formData.append("file", state.file);
+                formData.append("models", modelIds.join(","));
+
+                try {
+                    const response = await fetch(`${apiBase}/api/predict`, {
+                        method: "POST",
+                        body: formData,
+                    });
+                    const data = await response.json();
+                    if (!response.ok || data.error) {
+                        showError(data.error || `Request failed with status ${response.status}.`);
+                        return null;
+                    }
+                    return data;
+                } catch (error) {
+                    showError("Could not reach the backend server.");
+                    return null;
+                } finally {
+                    setLoading(false);
                 }
+            };
 
-                setImg("svm-img-original", svm.original_b64);
-                setImg("svm-img-raw-mask", svm.raw_mask_b64);
-                setImg("svm-img-clean-mask", svm.clean_mask_b64);
-                setImg("svm-img-boxed", svm.boxed_b64);
+            const renderKeyValues = (items) => `
+                <div class="kv-grid">
+                    ${items.map((item) => `
+                        <div class="kv">
+                            <span>${escapeHtml(item.label)}</span>
+                            <strong>${escapeHtml(item.value)}</strong>
+                        </div>
+                    `).join("")}
+                </div>
+            `;
 
-                renderClassification(svm.roi_results || [], svmClassificationResults, "--accent-svm");
-                renderSvmRoiList(svm.roi_results || []);
-
-                renderClassification(cnn.roi_results || [], cnnClassificationResults, "--accent-cnn");
-                renderCnnRoiList(cnn.roi_results || []);
-
-                setHidden(fallbackBox, !svm.fallback);
-                setResultsVisible(true);
-                hasResults = true;
-            } catch (err) {
-                if (errorBox) {
-                    errorBox.innerHTML = "Error: Could not reach the backend.";
-                    setHidden(errorBox, false);
+            const renderScoreList = (topScores) => {
+                if (!topScores || !topScores.length) {
+                    return `<div class="score-list"><div class="score-row">No score details</div></div>`;
                 }
-                if (!hasResults) {
-                    setResultsVisible(false);
+                return `
+                    <div class="score-list">
+                        ${topScores.map((item) => {
+                            const width = Math.max(0, Math.min(100, Number(item.score) || 0));
+                            return `
+                                <div class="score-row">
+                                    <div class="score-label">${escapeHtml(item.label)}</div>
+                                    <div class="score-bar"><div class="score-fill" style="width: ${width}%"></div></div>
+                                    <div class="score-value">${formatScore(item.score)}</div>
+                                </div>
+                            `;
+                        }).join("")}
+                    </div>
+                `;
+            };
+
+            const stepCard = (index, title, image, description, details) => `
+                <article class="step-card">
+                    <div class="step-index">${String(index).padStart(2, "0")}</div>
+                    <div class="step-media"><img src="${image || ""}" alt="${escapeHtml(title)}"></div>
+                    <div class="step-detail">
+                        <h3>${escapeHtml(title)}</h3>
+                        <p>${escapeHtml(description)}</p>
+                        ${details || ""}
+                    </div>
+                </article>
+            `;
+
+            const renderPipeline = (result) => {
+                const params = result.hog_params || {};
+                const pred = result.prediction || {};
+                const size = result.image_size || [];
+                const featureLengths = result.feature_lengths || {};
+                const usesHsv = result.feature_extractor === "HOG_HSV";
+
+                const outputDetails = `
+                    <div class="output-card">
+                        <div class="prediction-box">
+                            <div class="prediction-label">${escapeHtml(pred.label || "Unknown")}</div>
+                            <div class="prediction-score">${escapeHtml(pred.score_type || "score")}: ${formatScore(pred.confidence)}</div>
+                        </div>
+                        ${renderScoreList(pred.top_scores || [])}
+                    </div>
+                `;
+
+                return `
+                    <div class="pipeline">
+                        ${stepCard(
+                            1,
+                            "Input image",
+                            result.steps.original,
+                            "Raw upload before any feature extraction.",
+                            renderKeyValues([
+                                { label: "Model", value: result.name },
+                                { label: "File", value: result.path },
+                                { label: "Classes", value: result.classes.join(", ") },
+                            ])
+                        )}
+                        ${stepCard(
+                            2,
+                            "Grayscale",
+                            result.steps.grayscale,
+                            "The RGB/BGR image is converted to one luminance channel.",
+                            renderKeyValues([
+                                { label: "Channels", value: "1" },
+                                { label: "Range", value: "0.0 to 1.0" },
+                                { label: "Purpose", value: "shape and edge focus" },
+                            ])
+                        )}
+                        ${stepCard(
+                            3,
+                            "Resize",
+                            result.steps.resized,
+                            "The grayscale image is resized to the training resolution.",
+                            renderKeyValues([
+                                { label: "Width", value: size[1] || 128 },
+                                { label: "Height", value: size[0] || 128 },
+                                { label: "Anti aliasing", value: "true" },
+                            ])
+                        )}
+                        ${stepCard(
+                            4,
+                            "HOG visualization",
+                            result.steps.hog,
+                            "Gradients are grouped into cells and normalized across local blocks.",
+                            renderKeyValues([
+                                { label: "Orientations", value: params.orientations },
+                                { label: "Pixels/cell", value: (params.pixels_per_cell || []).join("x") },
+                                { label: "Cells/block", value: (params.cells_per_block || []).join("x") },
+                            ])
+                        )}
+                        ${stepCard(
+                            5,
+                            `${result.type} output`,
+                            result.steps.original,
+                            usesHsv
+                                ? "The selected model uses HOG shape descriptors plus HSV color descriptors and returns the predicted class."
+                                : "The selected model uses the HOG descriptors and returns the predicted class.",
+                            usesHsv
+                                ? renderKeyValues([
+                                    { label: "Extractor", value: formatFeatureExtractor(result) },
+                                    { label: "HOG", value: Number(featureLengths.hog || 0).toLocaleString() },
+                                    { label: "HSV", value: Number(featureLengths.hsv || 0).toLocaleString() },
+                                    { label: "Total", value: Number(featureLengths.total || 0).toLocaleString() },
+                                ]) + outputDetails
+                                : outputDetails
+                        )}
+                    </div>
+                `;
+            };
+
+            const renderSingle = (data) => {
+                const result = data.results[0];
+                els.singleResults.innerHTML = `
+                    <div class="result-header">
+                        <div>
+                            <h2 class="result-title">${escapeHtml(result.name)}</h2>
+                            <div class="result-subtitle">${escapeHtml(data.filename)} | ${data.input.width}x${data.input.height}px</div>
+                        </div>
+                        <div class="model-chip">${escapeHtml(result.type)} | ${escapeHtml(result.tag)}</div>
+                    </div>
+                    ${renderPipeline(result)}
+                `;
+                els.singleResults.dataset.hasResult = "true";
+                setActiveTab("single");
+            };
+
+            const renderCompare = (data) => {
+                els.compareResults.innerHTML = `
+                    <div class="result-header">
+                        <div>
+                            <h2 class="result-title">Model comparison</h2>
+                            <div class="result-subtitle">${escapeHtml(data.filename)} | ${data.input.width}x${data.input.height}px</div>
+                        </div>
+                        <div class="model-chip">2 pipelines</div>
+                    </div>
+                    <div class="compare-grid">
+                        ${data.results.map((result) => `
+                            <section class="compare-column">
+                                <div class="result-header">
+                                    <div>
+                                        <h2 class="result-title">${escapeHtml(result.name)}</h2>
+                                        <div class="result-subtitle">${escapeHtml(result.type)} | ${escapeHtml(formatFeatureExtractor(result))} | ${escapeHtml(formatHogParams(result.hog_params))}</div>
+                                    </div>
+                                    <div class="model-chip">${escapeHtml(result.tag)}</div>
+                                </div>
+                                ${renderPipeline(result)}
+                            </section>
+                        `).join("")}
+                    </div>
+                `;
+                els.compareResults.dataset.hasResult = "true";
+                setActiveTab("compare");
+            };
+
+            const loadModels = async () => {
+                try {
+                    const response = await fetch(`${apiBase}/api/models`);
+                    const data = await response.json();
+                    if (!response.ok || !Array.isArray(data.models) || data.models.length === 0) {
+                        throw new Error("No HOG models are available.");
+                    }
+                    populateModels(data.models);
+                } catch (error) {
+                    els.modelStatus.textContent = "Model load failed";
+                    showError("Could not load model metadata from the backend.");
                 }
-            } finally {
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = "Analyze and predict";
+            };
+
+            els.singleTabBtn.addEventListener("click", () => setActiveTab("single"));
+            els.compareTabBtn.addEventListener("click", () => setActiveTab("compare"));
+
+            els.fileInput.addEventListener("change", () => {
+                handleFile(els.fileInput.files && els.fileInput.files[0]);
+            });
+
+            ["dragenter", "dragover"].forEach((eventName) => {
+                els.dropZone.addEventListener(eventName, (event) => {
+                    event.preventDefault();
+                    els.dropZone.classList.add("dragging");
+                });
+            });
+
+            ["dragleave", "drop"].forEach((eventName) => {
+                els.dropZone.addEventListener(eventName, (event) => {
+                    event.preventDefault();
+                    els.dropZone.classList.remove("dragging");
+                });
+            });
+
+            els.dropZone.addEventListener("drop", (event) => {
+                const file = event.dataTransfer.files && event.dataTransfer.files[0];
+                if (file) {
+                    els.fileInput.files = event.dataTransfer.files;
+                    handleFile(file);
                 }
-            }
-        });
+            });
 
-        const useMaskingCheckbox = document.getElementById("use-masking-checkbox");
-        const maskingPipelineSteps = document.getElementById("masking-pipeline-steps");
-        const maskingImageCards = document.getElementById("masking-image-cards");
+            els.singleRunBtn.addEventListener("click", async () => {
+                const modelId = state.selectedSingle || (state.models[0] && state.models[0].id);
+                const data = await requestPrediction([modelId]);
+                if (data) {
+                    renderSingle(data);
+                }
+            });
 
-        const updateMaskingVisibility = () => {
-            const isMasking = useMaskingCheckbox ? useMaskingCheckbox.checked : true;
-            if (maskingPipelineSteps) {
-                maskingPipelineSteps.classList.toggle("is-hidden", !isMasking);
-            }
-            if (maskingImageCards) {
-                maskingImageCards.classList.toggle("is-hidden", !isMasking);
-            }
-        };
+            els.compareRunBtn.addEventListener("click", async () => {
+                const left = els.leftModel.value;
+                const right = els.rightModel.value;
+                if (!left || !right) {
+                    showError("Please select two models to compare.");
+                    return;
+                }
+                const data = await requestPrediction([left, right]);
+                if (data) {
+                    renderCompare(data);
+                }
+            });
 
-        if (useMaskingCheckbox) {
-            useMaskingCheckbox.addEventListener("change", updateMaskingVisibility);
-            updateMaskingVisibility();
-        }
-    })();
-</script>
-
+            loadModels();
+        })();
+    </script>
 </body>
 </html>
