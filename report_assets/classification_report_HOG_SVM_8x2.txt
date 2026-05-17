@@ -1,0 +1,11 @@
+              precision    recall  f1-score   support
+
+         Cam     0.8462    0.9167    0.8800        36
+      Chidan     0.7353    0.6944    0.7143        36
+    Hieulenh     0.6774    0.6774    0.6774        31
+    Nguyhiem     1.0000    1.0000    1.0000        29
+         Phu     0.5455    0.5217    0.5333        23
+
+    accuracy                         0.7742       155
+   macro avg     0.7609    0.7621    0.7610       155
+weighted avg     0.7708    0.7742    0.7720       155
