@@ -1,0 +1,10 @@
+\begin{tabular}{lllllrl}
+\toprule
+Mô hình & Feature extractor & HOG pixels/cell & HOG cells/block & HSV bins & Số chiều & Tham số model \\
+\midrule
+HOG + HSV + SVM 6x3 & HOG_HSV & (6, 6) & (3, 3) & (16, 8, 8) & 29273 & kernel=linear, C=7.3561, gamma=scale, class_weight=None, shrinking=False \\
+HOG + HSV + SVM 8x2 & HOG_HSV & (8, 8) & (2, 2) & (16, 8, 8) & 8132 & kernel=linear, C=0.0358, gamma=scale, class_weight=balanced, shrinking=False \\
+HOG + HSV + Random Forest 6x3 & HOG_HSV & (6, 6) & (3, 3) & (16, 8, 8) & 29273 & n_estimators=200, max_depth=45, min_samples_split=9, min_samples_leaf=3, max_features=sqrt \\
+HOG + HSV + Random Forest 8x2 & HOG_HSV & (8, 8) & (2, 2) & (16, 8, 8) & 8132 & n_estimators=200, max_depth=21, min_samples_split=4, min_samples_leaf=2, max_features=sqrt \\
+\bottomrule
+\end{tabular}

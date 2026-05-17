@@ -1,10 +1,10 @@
-\begin{tabular}{lrrrrr}
+\begin{tabular}{lrrrr}
 \toprule
-Mô hình & Accuracy & F1-Score & Macro F1 & Samples & Skipped \\
+Mô hình & Accuracy & Macro F1-score & Weighted F1-score & Samples \\
 \midrule
-HOG SVM 8x2 & 0.914200 & 0.914200 & 0.908000 & 303 & 0 \\
-HOG RF 8x2 & 0.910900 & 0.910600 & 0.905900 & 303 & 0 \\
-HOG SVM 6x3 & 0.901000 & 0.900900 & 0.892100 & 303 & 0 \\
-HOG RF 6x3 & 0.887800 & 0.887500 & 0.882100 & 303 & 0 \\
+HOG + HSV + SVM 8x2 & 0.914200 & 0.908000 & 0.914200 & 303 \\
+HOG + HSV + Random Forest 8x2 & 0.910900 & 0.905900 & 0.910600 & 303 \\
+HOG + HSV + SVM 6x3 & 0.901000 & 0.892100 & 0.900900 & 303 \\
+HOG + HSV + Random Forest 6x3 & 0.887800 & 0.882100 & 0.887500 & 303 \\
 \bottomrule
 \end{tabular}

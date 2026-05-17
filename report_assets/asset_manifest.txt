@@ -1,0 +1,19 @@
+Các file đã sinh trong report_assets:
+- asset_manifest.txt
+- best_model_summary.tex
+- classification_report_RF_6x3.txt
+- classification_report_RF_8x2.txt
+- classification_report_SVM_6x3.txt
+- classification_report_SVM_8x2.txt
+- confusion_matrix_best.png
+- data_counts.tex
+- data_distribution.png
+- feature_pipeline_hog_hsv.png
+- hog_feature_compare.png
+- hog_feature_dimensions.tex
+- hog_hsv_feature_dimensions.tex
+- model_comparison.png
+- model_comparison.tex
+- model_params.tex
+- pipeline_best.png
+- prediction_pipeline_SVM_8x2.png
